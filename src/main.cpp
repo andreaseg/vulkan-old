@@ -14,4 +14,8 @@ int main(int argc, char** argv) {
     std::vector<char*> enabled_extensions;
 
     LoadInstanceLevelFunctions(instance, enabled_extensions);
+
+    std::vector<VkPhysicalDevice> available_devices;
+
+    EnumeratePhysicalDevices(instance, available_devices);
 }

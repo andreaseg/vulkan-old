@@ -62,4 +62,6 @@ PFN_vkCreateXlibSurfaceKHR = vkCreateXlibSurfaceKHR;
 
 bool LoadInstanceLevelFunctions(VkInstance &instance, std::vector<char*> enabled_extensions);
 
+bool EnumeratePhysicalDevices(VkInstance &instance, std::vector<VkPhysicalDevice> &available_devices);
+
 #endif

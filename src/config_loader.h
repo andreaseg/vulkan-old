@@ -12,6 +12,11 @@ default value
 #ifndef CONFIG_LOADER_H
 #define CONFIG_LOADER_H
 
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <algorithm>
+
 namespace config {
 
 #define PARAMS(P)               \

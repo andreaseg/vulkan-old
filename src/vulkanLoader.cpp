@@ -135,22 +135,22 @@ bool CreateInstance(std::vector<char*> desired_extensions, VkInstance &instance)
     VkApplicationInfo application_info = {
         VK_STRUCTURE_TYPE_APPLICATION_INFO,
         nullptr,
-        "Vulkan cookbook",
-        VK_MAKE_VERSION(1, 0, 0),
-        "Vulkan cookbook (engine)",
-        VK_MAKE_VERSION(1, 0, 0),
-        VK_MAKE_VERSION(1, 0, 0)
+        "Vulkan cookbook",                          // Application name
+        VK_MAKE_VERSION(1, 0, 0),                   // Application version
+        "Vulkan cookbook (engine)",                 // Engine name
+        VK_MAKE_VERSION(1, 0, 0),                   // Engine version
+        VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION)    // Vulkan API version
     };
 
     VkInstanceCreateInfo instance_create_info = {
         VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         nullptr,
         0,
-        &application_info,
-        0,
-        nullptr,
-        static_cast<uint32_t>(desired_extensions.size()),
-        desired_extensions.size() > 0 ? &desired_extensions[0] : nullptr
+        &application_info,                                                  // Application info
+        0,                                                                  // Layer count
+        nullptr,                                                            // Layer names
+        static_cast<uint32_t>(desired_extensions.size()),                   // Extension count
+        desired_extensions.size() > 0 ? &desired_extensions[0] : nullptr    // Extension names
     };
 
     VkResult result = vkCreateInstance(&instance_create_info, nullptr, &instance);
@@ -230,5 +230,68 @@ bool LoadInstanceLevelFunctions(VkInstance &instance, std::vector<char*> enabled
     }
 
     #include "ListOfVulkanFunctions.inl"
+    return true;
+}
+
+bool EnumeratePhysicalDevices(VkInstance &instance, std::vector<VkPhysicalDevice> &available_devices) {
+    uint32_t device_count = 0;
+    VkResult result = VK_SUCCESS;
+
+    result = vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
+    if ( (result != VK_SUCCESS) ||
+        (device_count) == 0) {
+            std::cerr << "Could not enumerate physical devices" << std::endl;
+            return false;
+        }
+
+    available_devices.resize(device_count);
+    result = vkEnumeratePhysicalDevices(instance, &device_count, &available_devices[0]);
+    if ( (result != VK_SUCCESS) ||
+        (device_count) == 0) {
+            std::cerr << "Could not enumerate physical devices" << std::endl;
+            return false;
+        }
+
+    std::cout << "Found " << device_count << " physical devices:" << std::endl;
+    for (VkPhysicalDevice device : available_devices) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(device, &properties);
+        console_color::color old_color = console_color::set_color(console_color::YELLOW);
+        std::cout << properties.deviceName << std::endl;
+        console_color::set_color(old_color);
+        old_color = console_color::set_color(console_color::GREY);
+
+        std::cout << "Vulkan API: " << VK_VERSION_MAJOR(properties.apiVersion) << "."
+        << VK_VERSION_MINOR(properties.apiVersion) << "."
+        << VK_VERSION_PATCH(properties.apiVersion) << "\n";
+        std::cout << "Driver: " << properties.driverVersion << "\n";
+        std::cout << "VendorID: 0x" << std::hex << properties.vendorID << "\n";
+        std::cout << "DeviceID: 0x" << std::hex << properties.deviceID << "\n";
+
+        std::cout << "Device type: ";
+        switch (properties.deviceType) {
+            case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+            std::cout << "Integrated GPU";
+            case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+            std::cout << "Discrete GPU";
+            break;
+            case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+            std::cout << "Virtual GPU";
+            break;
+            case VK_PHYSICAL_DEVICE_TYPE_CPU:
+            std::cout << "CPU";
+            break;
+            case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+            std::cout << "Other";
+            break;
+            default:
+            std::cout << "Unknown";
+        }
+        std::cout << "\n";
+
+        std::cout << std::endl;
+        console_color::set_color(old_color);
+    }
+
     return true;
 }

@@ -1,9 +1,5 @@
 #ifdef PARAMS
 
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <algorithm>
 
 namespace detail {
 
@@ -84,7 +80,9 @@ static void load(std::string path) {
         file.close();
         if (VERBOSE) std::cout << std::endl;
     }
-    else std::cout << "Unable to open file" << std::endl;; 
+    else {
+        std::cout << "Unable to open file " << path << std::endl;
+    } 
     
 }
 
@@ -100,8 +98,9 @@ static void save(std::string path) {
         file.close();
         if (VERBOSE) std::cout << std::endl;
     }
-    else std::cout << "Unable to open file " << path;
-    
+    else {
+        std::cout << "Unable to open file " << path << std::endl;
+    }
 }
 
 #undef PARAMS
