@@ -4,7 +4,8 @@
 #include <iostream>
 #include <vector>
 
-#include "config_loader.h"
+#include "util/config_loader.h"
+#include "util/console_color.h"
 
 #ifdef __linux__
 #include <dlfcn.h>

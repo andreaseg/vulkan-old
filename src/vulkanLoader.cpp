@@ -1,7 +1,5 @@
 #include "vulkanLoader.h"
 
-#include "console_color.h"
-
 LIBRARY_TYPE load_vulkan() {
 
     // Loading library
