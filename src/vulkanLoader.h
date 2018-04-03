@@ -41,13 +41,15 @@ bool LoadGlobalFunctions();
     
 bool CheckAvailableInstanceExtensions(std::vector<VkExtensionProperties> &available_extensions);
 
-bool CreateInstance(std::vector<char*> desired_extensions, VkInstance &instance);
+bool CreateInstance(VkInstance &instance, std::vector<char*> desired_extensions);
 
 static PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
 static PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties;
 static PFN_vkGetPhysicalDeviceFeatures vkGetPhysicalDeviceFeatures;
 static PFN_vkCreateDevice vkCreateDevice;
 static PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;
+static PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties;
+static PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties;
 
 static PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR;
 static PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
@@ -64,5 +66,23 @@ PFN_vkCreateXlibSurfaceKHR = vkCreateXlibSurfaceKHR;
 bool LoadInstanceLevelFunctions(VkInstance &instance, std::vector<char*> enabled_extensions);
 
 bool EnumeratePhysicalDevices(VkInstance &instance, std::vector<VkPhysicalDevice> &available_devices);
+
+void PrintPhysicalDevice(VkPhysicalDevice &physical_device);
+
+bool CheckAvailableDeviceExtensions(VkPhysicalDevice &physical_device, std::vector<VkExtensionProperties> &available_extensions);
+
+bool CheckAvailableQueueFamilies(VkPhysicalDevice &physical_device, std::vector<VkQueueFamilyProperties> &queue_families);
+
+void PrintQueueFamilyProperties(VkQueueFamilyProperties &properties);
+
+bool SelectQueueFamily(VkPhysicalDevice &physical_device, VkQueueFlags desired_capabilities, uint32_t &queue_family_index);
+
+struct QueueInfo {
+    uint32_t            FamilyIndex;
+    std::vector<float>  Priorities;
+};
+
+bool CreateLogicalDevice(VkPhysicalDevice &physical_device, std::vector<QueueInfo> &queue_infos, 
+    std::vector<char*> &desired_extensions, VkPhysicalDeviceFeatures &desired_features, VkDevice &logical_device);
 
 #endif

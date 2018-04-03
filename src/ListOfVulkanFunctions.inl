@@ -31,6 +31,8 @@ INSTANCE_LEVEL_VULKAN_FUNCTION( vkGetPhysicalDeviceProperties )
 INSTANCE_LEVEL_VULKAN_FUNCTION( vkGetPhysicalDeviceFeatures )
 INSTANCE_LEVEL_VULKAN_FUNCTION( vkCreateDevice )
 INSTANCE_LEVEL_VULKAN_FUNCTION( vkGetDeviceProcAddr )
+INSTANCE_LEVEL_VULKAN_FUNCTION( vkEnumerateDeviceExtensionProperties )
+INSTANCE_LEVEL_VULKAN_FUNCTION( vkGetPhysicalDeviceQueueFamilyProperties )
 
 #undef INSTANCE_LEVEL_VULKAN_FUNCTION
 //-----------------------------
