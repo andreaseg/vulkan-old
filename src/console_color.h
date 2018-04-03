@@ -12,6 +12,9 @@
 
 namespace console_color {
 
+    /**
+    * Struct containing OS-specific definition of console-colors
+    */
     struct color {
         #ifdef __linux__
         
@@ -28,6 +31,8 @@ namespace console_color {
     #ifdef __linux__
         
     #elif _WIN32
+    
+    // Windows standard color definitions.
 
     static color BLACK(0);
     static color DARK_BLUE(1);
@@ -50,6 +55,9 @@ namespace console_color {
     #error "Unknown or unsupported OS"
     #endif
 
+    /**
+    * Returns the current text-color of the standard console output
+    **/
     static color get_color() {
         #ifdef __linux__
         
@@ -64,7 +72,11 @@ namespace console_color {
         #endif
     }
     
-
+    /**
+    * Changes the current text-color of the standard console output,
+    * also returns the text-color before the change, useful if you are
+    * printing text that is not white.
+    **/
     static color set_color(color c) {
         #ifdef __linux__
         
