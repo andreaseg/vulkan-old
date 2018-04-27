@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     }
     catch (...) {
         std::cout << "unknown error\n";
-        exit(-1);
+        exit(-2);
     }
 
     return 0;
