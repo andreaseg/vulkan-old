@@ -22,16 +22,9 @@ all: tool
 tool: $(OBJS)
 	$(CXX) $(INC) $(LDFLAGS) -o target/$(TARGET) $(OBJS) $(LDLIBS) 
 
-depend: .depend
-
-.depend: $(SRCS)
-	$(RM) ./.depend
-	$(CXX) $(INC) $(CPPFLAGS) -MM $^>>./.depend;
-
 clean:
 	$(RM) $(OBJS)
 
 distclean: clean
-	$(RM) *~ .depend
+	$(RM) 
 
-include .depend
