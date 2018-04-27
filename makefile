@@ -1,44 +1,38 @@
 NAME= main
-WARN= -Wall -Wextra 
+WARN= -Wall -Wextra
+CPPVER= -std=c++14
+SRCS= $(wildcard src/*.cpp)
+CC=clang
+CXX=clang
 
 ifeq ($(OS),Windows_NT)
-LDFLAGS=-g -Xclang -flto-visibility-public-std $(WARN)
+LDFLAGS=-g $(CPPVER) $(WARN)
 LDLIBS= -L$(shell echo $(VULKAN_SDK))/Source/lib -lvulkan-1
 TARGET=$(NAME).exe
 else
-LDFLAGS=-g
+LDFLAGS=-g $(CPPVER) $(WARN)
 LDLIBS=-ldl -L$(shell echo $(VULKAN_SDK))/lib -lvulkan
 TARGET=$(NAME)
 endif
 
-SRCS= $(wildcard src/*.cpp)
-
-CC=clang
-CXX=clang
-OBJS=$(subst .cc,.o,$(SRCS))
+OBJS=$(patsubst src/%,target/%,$(patsubst %.cpp,%.o,$(SRCS)))
 RM=rm -f
-INC= -I$(shell echo $(VULKAN_SDK))/Include
-CPPFLAGS=-g -std=c++11 $(WARN)
+INC= -I$(shell echo $(VULKAN_SDK))/Include 
+CPPFLAGS=-g -Xclang -flto-visibility-public-std $(CPPVER) $(WARN)
 
 DIRS=target
 $(shell mkdir -p $(DIRS))
 
-
-all: $(NAME)
-
-$(NAME): $(OBJS)
-	$(CXX) $(INC) $(LDFLAGS) -o target/$(TARGET) $(OBJS) $(LDLIBS) 
-
-depend: .depend
-
-.depend: $(SRCS)
-	$(RM) ./.depend
-	$(CXX) $(INC) $(CPPFLAGS) -MM $^>>./.depend;
+all: $(TARGET)
+	@true
 
 clean:
-	$(RM) $(OBJS)
+	@$(RM) $(TARGET) $(OBJS)
 
-distclean: clean
-	$(RM) *~ .depend
+$(TARGET): $(OBJS)
+	@echo "Linking the target $@"
+	@$(CXX) $(LDFLAGS) -o target/$@ $^ $(LDLIBS)
 
-include .depend
+target/%.o : src/%.cpp
+	@echo "Compiling $<"
+	@$(CXX) $(INC) $(CPPFLAGS) -c $< -o $@
