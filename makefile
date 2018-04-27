@@ -17,6 +17,9 @@ RM=rm -f
 INC= -I$(shell echo $(VULKAN_SDK))/Include
 CPPFLAGS=-g -std=c++11 -Wall -Wextra 
 
+.cpp.o:
+    $(CXX) $(CPPFLAGS) $(INC) -c $<
+
 all: tool
 
 tool: $(OBJS)
