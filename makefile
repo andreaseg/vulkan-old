@@ -12,7 +12,7 @@ SRCS= src/main.cpp
 
 CC=clang
 CXX=clang
-OBJS=$(subst .cc,.o,$(SRCS))
+OBJS=main.o
 RM=rm -f
 INC= -I$(shell echo $(VULKAN_SDK))/Include
 CPPFLAGS=-g -std=c++11 -Wall -Wextra 
