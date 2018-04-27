@@ -5,7 +5,6 @@
 
 #include "util/console_color.h"
 
-#define VULKAN_HPP_NO_SMART_HANDLE
 #include "vulkan/vulkan.hpp"
 
 void PrintPhysicalDevice(vk::PhysicalDevice &physical_device) {
