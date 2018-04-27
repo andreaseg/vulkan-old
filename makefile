@@ -5,15 +5,15 @@ SRCS= $(wildcard src/*.cpp)
 CC=clang
 CXX=clang
 
-DEBUG?= 1
+DEBUG?=1
 
 ifeq ($(DEBUG), 1)
-	CPPFLAGS += -g
-	LDFLAGS += -g
+	CPPFLAGS = -g -o3 -march=native
+	LDFLAGS  = -g -o3 -march=native
 	DIR=debug
 else
-	CPPFLAGS += -o2
-	LDFLAGS += -o2
+	CPPFLAGS = -o3 -march=native
+	LDFLAGS  = -o3 -march=native
 	DIR=release
 endif
 
@@ -27,17 +27,23 @@ LDLIBS=-ldl -L$(shell echo $(VULKAN_SDK))/lib -lvulkan
 TARGET=$(NAME)
 endif
 OBJS=$(patsubst src/%,$(DIR)/%,$(patsubst %.cpp,%.o,$(SRCS)))
-RM=rm -f
+RM=rm -rf
 INC= -I$(shell echo $(VULKAN_SDK))/Include 
 CPPFLAGS+= -Xclang -flto-visibility-public-std $(CPPVER) $(WARN)
 
 $(shell mkdir -p $(DIR))
 
+ifeq ($(DEBUG), 1)
 all: $(TARGET)
 	@true
+else
+all: $(TARGET)
+	@true
+	@$(RM) $(OBJS)
+endif
 
 clean:
-	@$(RM) $(DIR)/$(TARGET) $(OBJS)
+	@$(RM) $(DIR)
 
 $(TARGET): $(OBJS)
 	@echo "Linking the target $@"
