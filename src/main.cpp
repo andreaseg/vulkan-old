@@ -9,6 +9,15 @@ static const char* EngineName = "Engine name";
 
 int main(int argc, char** argv) {
 
+    // Parameters
+    for(int i = 1; i < argc; i++) {
+        char* argument = argv[i];
+        if(strcmp(argument, "-h") || strcmp(argument, "help")) {
+            std::cout << "This program takes no arguments." << std::endl;
+            return 0;
+        }
+    }
+
     try{
     
         vk::ApplicationInfo appInfo(AppName, 1, EngineName, 1, VK_API_VERSION_1_1);

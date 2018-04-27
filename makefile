@@ -1,8 +1,9 @@
 NAME= main
+WARN= -Wall -Wextra 
 
 ifeq ($(OS),Windows_NT)
-LDFLAGS=-g -Xclang -flto-visibility-public-std
-LDLIBS=  -L$(shell echo $(VULKAN_SDK))/Source/lib -lvulkan-1
+LDFLAGS=-g -Xclang -flto-visibility-public-std $(WARN)
+LDLIBS= -L$(shell echo $(VULKAN_SDK))/Source/lib -lvulkan-1
 TARGET=$(NAME).exe
 else
 LDFLAGS=-g
@@ -17,7 +18,11 @@ CXX=clang
 OBJS=$(subst .cc,.o,$(SRCS))
 RM=rm -f
 INC= -I$(shell echo $(VULKAN_SDK))/Include
-CPPFLAGS=-g -std=c++11 -Wall -Wextra 
+CPPFLAGS=-g -std=c++11 $(WARN)
+
+DIRS=target
+$(shell mkdir -p $(DIRS))
+
 
 all: $(NAME)
 
