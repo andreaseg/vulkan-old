@@ -134,11 +134,13 @@ class Graphics {
 int main() {
 
     #ifdef DEBUG
+    #else
     std::ofstream cout("log.txt");
     std::cout.rdbuf(cout.rdbuf());
-    #endif
     std::ofstream cerr("error.txt");
     std::cerr.rdbuf(cerr.rdbuf());
+    #endif
+    
 
     Graphics gfx;
 

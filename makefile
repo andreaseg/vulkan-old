@@ -16,15 +16,15 @@ endif
 
 ifeq ($(DEBUG), 1)
 	CPPFLAGS = -m64 -g -o3 -march=native -DDEBUG
-	LDFLAGS  = -m64 -g -o3 -march=native
+	LDFLAGS  = -m64 -g -o3 -march=native -Wl,-subsystem:console
 else
 	CPPFLAGS = -m64 -o3 -march=native
-	LDFLAGS  = -m64 -o3 -march=native
+	LDFLAGS  = -m64 -o3 -march=native -Wl,-subsystem:windows
 endif
 
 CPPFLAGS+= -Xclang -flto-visibility-public-std $(CPPVER) $(WARN)
 ifeq ($(OS),Windows_NT)
-LDFLAGS+= $(CPPVER) $(WARN) -Wl,-subsystem:windows
+LDFLAGS+= $(CPPVER) $(WARN)
 LDLIBS= -L$(shell echo $(VULKAN_SDK))/Source/lib -lvulkan-1 -L$(shell echo $(GLFW))/Libs/ -lglfw3dll
 TARGET=$(NAME).exe
 else
