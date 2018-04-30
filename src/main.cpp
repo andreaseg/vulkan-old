@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <cstdio>
+#include <algorithm>
 
 #include "includes.hpp"
 #include "vulkan_print.hpp"
@@ -10,11 +11,14 @@
 
 class Graphics {
     public:
-        vk::UniqueInstance instance;
-        vk::UniqueDevice device;
+        vk::Instance instance;
+        vk::Device device;
         vk::Queue queue;
         vk::SurfaceKHR surface;
         GLFWwindow* window;
+        vk::SwapchainKHR swapchain;
+        std::vector<vk::Image> swapChainImages;
+        vk::Format swapChainImageFormat;
 
         const char* AppName = "App name";
         const char* EngineName = "Engine name";
@@ -55,11 +59,11 @@ class Graphics {
                 createInstanceInfo.ppEnabledExtensionNames = &extensions[0];
 
                 // Creating an instance
-                instance = vk::createInstanceUnique(createInstanceInfo);
+                instance = vk::createInstance(createInstanceInfo);
 
                 // Picking a physical device
 
-                std::vector<vk::PhysicalDevice> physicalDevices = instance->enumeratePhysicalDevices();
+                std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
                 assert(!physicalDevices.empty());
 
                 PrintPhysicalDevice(physicalDevices[0]);
@@ -83,11 +87,18 @@ class Graphics {
 
                 float queuePriority = 0.0f;
                 vk::DeviceQueueCreateInfo deviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), static_cast<uint32_t>(queueFamilyIndex), 1, &queuePriority);
-                device = physicalDevices[0].createDeviceUnique(vk::DeviceCreateInfo(vk::DeviceCreateFlags(), 1, &deviceQueueCreateInfo));
+                vk::DeviceCreateInfo deviceCreateInfo = vk::DeviceCreateInfo(vk::DeviceCreateFlags(), 1, &deviceQueueCreateInfo);
+
+                std::vector<char const*> device_level_extensions;
+                device_level_extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+                deviceCreateInfo.enabledExtensionCount = device_level_extensions.size();
+                deviceCreateInfo.ppEnabledExtensionNames = &device_level_extensions[0];
+                device = physicalDevices[0].createDevice(deviceCreateInfo);
 
                 // Picking a queue
 
-                queue = device->getQueue(queueFamilyIndex,0);
+                queue = device.getQueue(queueFamilyIndex,0);
 
                 // Create a GLFW Window
 
@@ -96,15 +107,69 @@ class Graphics {
 
                 // Attach Vulkan Surface to GLFW window
                 VkSurfaceKHR raw_surface(surface);
-                VkResult result = glfwCreateWindowSurface(instance.get(), window, NULL, &raw_surface);
+                VkResult result = glfwCreateWindowSurface(instance, window, NULL, &raw_surface);
                 if (result != VK_SUCCESS) {
                     std::cerr << "GLFW: Unable to create surface, error code " << static_cast<int>(result) << std::endl;
                     exit(-1);
                 }
+                surface = (vk::SurfaceKHR)raw_surface;
 
+                if (!physicalDevices[0].getSurfaceSupportKHR(queueFamilyIndex, surface)) {
+                    std::cerr << "Surface not supported in queue family." << std::endl;
+                    exit(-1);
+                }
+
+                // Making a swap-chain
+
+                vk::SwapchainCreateInfoKHR swapChainInfo;
+
+                // Selecting format for swapchain
+                auto surface_formats = physicalDevices[0].getSurfaceFormatsKHR(surface);
+                if (surface_formats.size() == 1 && surface_formats[0].format == vk::Format::eUndefined) {
+                    swapChainInfo.setImageFormat(vk::Format::eB8G8R8A8Unorm);
+                    swapChainInfo.setImageColorSpace(vk::ColorSpaceKHR::eSrgbNonlinear);
+                } else if (std::any_of(surface_formats.begin(), surface_formats.end(), 
+                    [](vk::SurfaceFormatKHR const& f) {return f.format == vk::Format::eUndefined && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+                    })) {
+                    swapChainInfo.setImageFormat(vk::Format::eB8G8R8A8Unorm);
+                    swapChainInfo.setImageColorSpace(vk::ColorSpaceKHR::eSrgbNonlinear);
+                } else {
+                    swapChainInfo.setImageFormat(surface_formats[0].format);
+                    swapChainInfo.setImageColorSpace(surface_formats[0].colorSpace);
+                }
+
+                swapChainImageFormat = swapChainInfo.imageFormat;
+
+                // Selecting presentation mode
+                auto presentation_modes = physicalDevices[0].getSurfacePresentModesKHR(surface);
+                if (std::any_of(presentation_modes.begin(), presentation_modes.end(), [](vk::PresentModeKHR const& p){return p == vk::PresentModeKHR::eMailbox;})) {
+                    swapChainInfo.presentMode = vk::PresentModeKHR::eMailbox;
+                } else if (std::any_of(presentation_modes.begin(), presentation_modes.end(), [](vk::PresentModeKHR const& p){return p == vk::PresentModeKHR::eImmediate;})) {
+                    swapChainInfo.presentMode = vk::PresentModeKHR::eImmediate;
+                } else {
+                    swapChainInfo.presentMode = vk::PresentModeKHR::eFifo;
+                }
+
+                // Selecting dimensions
+                auto capabilities = physicalDevices[0].getSurfaceCapabilitiesKHR(surface);
+                width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, static_cast<uint32_t>(width)));
+                height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, static_cast<uint32_t>(height)));
+                swapChainInfo.setImageExtent(vk::Extent2D(width, height));
+                
+                swapChainInfo.setMinImageCount((capabilities.maxImageCount > 0) ? std::min(capabilities.maxImageCount, capabilities.minImageCount + 1) : capabilities.minImageCount + 1);
+                swapChainInfo.imageArrayLayers = 1;
+                swapChainInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+                swapChainInfo.surface = surface;
+
+                swapChainInfo.preTransform = capabilities.currentTransform;
+                swapChainInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+                swapChainInfo.clipped = VK_TRUE;
+                swapchain = device.createSwapchainKHR(swapChainInfo);
+                swapChainImages = device.getSwapchainImagesKHR(swapchain);
 
                 // Start the core-loop
                 loop();
+
 
             }
             catch (vk::SystemError err) {
@@ -118,7 +183,10 @@ class Graphics {
         }
 
         ~Graphics() {
-            vkDestroySurfaceKHR((VkInstance)instance.get(), VkSurfaceKHR(surface), nullptr);
+            vkDestroySwapchainKHR(device, swapchain, nullptr);
+            vkDestroySurfaceKHR((VkInstance)instance, VkSurfaceKHR(surface), nullptr);
+            device.destroy();
+            instance.destroy();
             glfwDestroyWindow(window); 
             glfwTerminate();
         }

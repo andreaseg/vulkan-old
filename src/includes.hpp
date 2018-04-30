@@ -1,6 +1,8 @@
 #ifndef PROJECT_INCLUDES_HPP
 #define PROJECT_INCLUDES_HPP
 
+#define NOMINMAX
+
 #define  VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.hpp>
 #define GLFW_DLL
