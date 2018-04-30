@@ -1,5 +1,6 @@
 .vscode/
 .depend
 target/
+!target/glfw3.dll
 log.txt
 error.txt
