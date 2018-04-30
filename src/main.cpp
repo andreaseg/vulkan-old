@@ -1,11 +1,11 @@
 #include <iostream>
 #include <string>
+#include <cstdio>
 
-#include "vulkan/vulkan.hpp"
+#include "includes.hpp"
 #include "vulkan_print.hpp"
 
-static const char* AppName = "App name";
-static const char* EngineName = "Engine name";
+
 
 class Graphics {
     public:
@@ -13,13 +13,48 @@ class Graphics {
         vk::UniqueDevice device;
         vk::Queue queue;
         vk::SurfaceKHR surface;
+        GLFWwindow* window;
+
+        const char* AppName = "App name";
+        const char* EngineName = "Engine name";
+
+        int width = 640;
+        int height = 480;
 
         Graphics() {
             try{
-                // Creating an instance
-
+                if (!glfwInit()) {
+		            std::cerr << "GLFW not initialized." << std::endl;
+                    exit(-1);
+                }
+                if (!glfwVulkanSupported()) {
+                    std::cerr << "Vulkan not supported." << std::endl;
+                    exit(-1);
+                }
+                // Application information
                 vk::ApplicationInfo appInfo(AppName, 1, EngineName, 1, VK_API_VERSION_1_1);
-                instance = vk::createInstanceUnique(vk::InstanceCreateInfo({}, &appInfo));
+
+                // Extensions needed
+                std::vector<char const*> extensions;
+                {
+                    uint32_t extensionCount = 0;
+                    char const** glfw_extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+                    for (uint32_t i = 0; i < extensionCount; i++) {
+                        extensions.push_back(&glfw_extensions[i][0]);
+                    }
+                }
+                #ifdef DEBUG
+                    extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+                #endif
+                extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+                extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+
+                vk::InstanceCreateInfo createInstanceInfo = vk::InstanceCreateInfo({}, &appInfo);
+                createInstanceInfo.enabledExtensionCount = extensions.size();
+                createInstanceInfo.ppEnabledExtensionNames = &extensions[0];
+
+                // Creating an instance
+                instance = vk::createInstanceUnique(createInstanceInfo);
 
                 // Picking a physical device
 
@@ -53,38 +88,63 @@ class Graphics {
 
                 queue = device->getQueue(queueFamilyIndex,0);
 
-                // Creating a surface
+                // Create a GLFW Window
+
+                glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+                window = glfwCreateWindow(width, height, AppName, NULL, NULL);
+
+                // Attach Vulkan Surface to GLFW window
+                VkSurfaceKHR raw_surface(surface);
+                VkResult result = glfwCreateWindowSurface(instance.get(), window, NULL, &raw_surface);
+                if (result != VK_SUCCESS) {
+                    std::cerr << "GLFW: Unable to create surface, error code " << static_cast<int>(result) << std::endl;
+                    exit(-1);
+                }
+
+
+                // Start the core-loop
+                loop();
 
             }
             catch (vk::SystemError err) {
-                std::cout << "vk::SystemError: " << err.what() << std::endl;
+                std::cerr << "vk::SystemError: " << err.what() << std::endl;
                 exit(-1);
             }
             catch (...) {
-                std::cout << "unknown error\n";
+                std::cerr << "unknown error\n";
                 exit(-2);
             }
         }
+
+        ~Graphics() {
+            vkDestroySurfaceKHR((VkInstance)instance.get(), VkSurfaceKHR(surface), nullptr);
+            glfwDestroyWindow(window); 
+            glfwTerminate();
+        }
     private:
+
+        void loop() {
+            while (!glfwWindowShouldClose(window)) {
+                glfwPollEvents();
+            }
+        }
 };
 
-int main(int argc, char** argv) {
+int main() {
 
     #ifdef DEBUG
         std::cout << "Running in Debug mode" << std::endl;
+        std::freopen( "log.txt", "w", stdout );
+        std::freopen( "error.txt", "w", stderr );
     #endif
-
-    // Parameters
-    for(int i = 1; i < argc; i++) {
-        char* argument = argv[i];
-        if(strcmp(argument, "-h") || strcmp(argument, "help")) {
-            std::cout << "This program takes no arguments." << std::endl;
-            return 0;
-        }
-    }
 
     Graphics gfx;
 
     return 0;
     
+}
+
+// Windows entry-point
+int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    return main();
 }

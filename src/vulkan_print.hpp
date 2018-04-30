@@ -3,9 +3,9 @@
 
 #include <iostream>
 
-#include "util/console_color.h"
+#include "util/console_color.hpp"
 
-#include "vulkan/vulkan.hpp"
+#include "includes.hpp"
 
 void PrintPhysicalDevice(vk::PhysicalDevice &physical_device) {
     vk::PhysicalDeviceProperties properties = physical_device.getProperties();

@@ -1,5 +1,5 @@
 .vscode/
 .depend
 target/
-debug/
-release/
+log.txt
+error.txt
