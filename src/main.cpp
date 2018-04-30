@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <cstdio>
 
@@ -133,10 +134,11 @@ class Graphics {
 int main() {
 
     #ifdef DEBUG
-        std::cout << "Running in Debug mode" << std::endl;
-        std::freopen( "log.txt", "w", stdout );
-        std::freopen( "error.txt", "w", stderr );
+    std::ofstream cout("log.txt");
+    std::cout.rdbuf(cout.rdbuf());
     #endif
+    std::ofstream cerr("error.txt");
+    std::cerr.rdbuf(cerr.rdbuf());
 
     Graphics gfx;
 
@@ -146,5 +148,9 @@ int main() {
 
 // Windows entry-point
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    (void)hInstance;
+    (void)hPrevInstance;
+    (void)lpCmdLine;
+    (void)nCmdShow;
     return main();
 }
