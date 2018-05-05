@@ -10,9 +10,10 @@ Graphics::Graphics() {
         auto app_info = generate_app_info();
         create_instance(app_info);
         pick_physical_device();
-        auto queue_family = pick_queue_family(vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute);
-        create_logical_device(queue_family);
-        create_surface(queue_family);
+        pick_queue_family(vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute);
+        create_logical_device();
+        create_surface();
+        create_swapchain();
 
 
     }
@@ -28,11 +29,11 @@ Graphics::Graphics() {
 }
 
 void Graphics::check_support() {
-    if (!glfwInit()) {
+    if (!glfw::glfwInit()) {
         std::cerr << "GLFW not initialized." << std::endl;
         exit(-1);
     }
-    if (!glfwVulkanSupported()) {
+    if (!glfw::glfwVulkanSupported()) {
         std::cerr << "Vulkan not supported." << std::endl;
         exit(-1);
     }
@@ -43,11 +44,12 @@ vk::ApplicationInfo Graphics::generate_app_info() {
 }
 
 void Graphics::create_instance(vk::ApplicationInfo app_info) {
+
     // Extensions needed
     std::vector<char const*> extensions;
     {
         uint32_t extensionCount = 0;
-        char const** glfw_extensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+        char const** glfw_extensions = glfw::glfwGetRequiredInstanceExtensions(&extensionCount);
         for (uint32_t i = 0; i < extensionCount; i++) {
             extensions.push_back(&glfw_extensions[i][0]);
         }
@@ -68,15 +70,19 @@ void Graphics::create_instance(vk::ApplicationInfo app_info) {
 
 void Graphics::pick_physical_device() {
 
+    assert(instance);
+
     std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
     assert(!physicalDevices.empty());
 
     physical_device = physicalDevices[0];
 }
                 
-uint32_t Graphics::pick_queue_family(vk::QueueFlags flags) {
+void Graphics::pick_queue_family(vk::QueueFlags flags) {
 
-    std::vector<vk::QueueFamilyProperties> queueFamilyProperties = this->physical_device.getQueueFamilyProperties();
+    assert(physical_device);
+
+    std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physical_device.getQueueFamilyProperties();
 
     size_t queueFamilyIndex = std::distance(queueFamilyProperties.begin(),
                                                     std::find_if(queueFamilyProperties.begin(),
@@ -85,12 +91,15 @@ uint32_t Graphics::pick_queue_family(vk::QueueFlags flags) {
 
     assert(queueFamilyIndex < queueFamilyProperties.size());
 
-    return static_cast<uint32_t>(queueFamilyIndex);
+    this->queue_family = static_cast<uint32_t>(queueFamilyIndex);
 }
 
-void Graphics::create_logical_device(uint32_t queueFamilyIndex) {
+void Graphics::create_logical_device() {
+
+    assert(physical_device);
+
     float queuePriority = 0.0f;
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), queueFamilyIndex, 1, &queuePriority);
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), queue_family, 1, &queuePriority);
     vk::DeviceCreateInfo deviceCreateInfo = vk::DeviceCreateInfo(vk::DeviceCreateFlags(), 1, &deviceQueueCreateInfo);
 
     std::vector<char const*> device_level_extensions;
@@ -102,29 +111,37 @@ void Graphics::create_logical_device(uint32_t queueFamilyIndex) {
 
     // Picking a queue
 
-    queue = device.getQueue(queueFamilyIndex,0);
+    queue = device.getQueue(this->queue_family,0);
 }
 
-void Graphics::create_surface(uint32_t queueFamilyIndex) {
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    window = glfwCreateWindow(width, height, AppName, NULL, NULL);
+void Graphics::create_surface() {
+
+    assert(instance);
+
+    glfw::glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    window = glfw::glfwCreateWindow(width, height, AppName, NULL, NULL);
 
     // Attach Vulkan Surface to GLFW window
     VkSurfaceKHR raw_surface(surface);
-    VkResult result = glfwCreateWindowSurface(instance, window, NULL, &raw_surface);
+    VkResult result = glfw::glfwCreateWindowSurface(instance, window, NULL, &raw_surface);
     if (result != VK_SUCCESS) {
         std::cerr << "GLFW: Unable to create surface, error code " << static_cast<int>(result) << std::endl;
         exit(-1);
     }
     surface = (vk::SurfaceKHR)raw_surface;
 
-    if (!physical_device.getSurfaceSupportKHR(queueFamilyIndex, surface)) {
+    if (!physical_device.getSurfaceSupportKHR(this->queue_family, surface)) {
         std::cerr << "Surface not supported in queue family." << std::endl;
         exit(-1);
     }
 }
 
 void Graphics::create_swapchain() {
+
+    assert(physical_device);
+    assert(device);
+    assert(surface);
+
     vk::SwapchainCreateInfoKHR swapChainInfo;
 
     // Selecting format for swapchain
@@ -182,13 +199,13 @@ Graphics::~Graphics() {
             vkDestroySurfaceKHR((VkInstance)instance, VkSurfaceKHR(surface), nullptr);
             device.destroy();
             instance.destroy();
-            glfwDestroyWindow(window); 
-            glfwTerminate();
+            glfw::glfwDestroyWindow(window); 
+            glfw::glfwTerminate();
         }
 
 void Graphics::start() {
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
+    while (!glfw::glfwWindowShouldClose(window)) {
+        glfw::glfwPollEvents();
         loop();
     }
 }
