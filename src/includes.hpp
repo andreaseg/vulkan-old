@@ -12,4 +12,6 @@ namespace glfw{
     #include <GLFW/glfw3native.h>
 }
 
+#include "graphics_engine.hpp"
+
 #endif

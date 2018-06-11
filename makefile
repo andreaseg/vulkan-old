@@ -57,3 +57,25 @@ $(TARGET): $(OBJS)
 $(DIR)/%.o : src/%.cpp
 	@echo "Compiling $<"
 	@$(CXX) $(INC) $(CPPFLAGS) -c $< -o $@
+
+# Shader compilation
+
+$(shell mkdir -p $(DIR)/shaders)
+
+SHDSRCS = $(wildcard src/shaders/*)
+SHDTAR = $(patsubst src/shaders/%,$(DIR)/shaders/%.spv,$(SHDSRCS))
+
+ifeq ($(OS),Windows_NT)
+	VAL = $(VULKAN_SDK)/Bin32/glslangValidator.exe
+else
+	VAL = $(VULKAN_SDK)/x86_64/bin/glslangValidator
+endif
+
+shaders: $(SHDTAR)
+
+$(DIR)/shaders/%.spv: src/shaders/%
+	@echo "Compiling shader $@"
+	@$(VAL) -V $< -o $@
+
+clean-shaders: $(SHDTAR)
+	@$(RM) $(SHDTAR)
