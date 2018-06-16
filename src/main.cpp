@@ -24,9 +24,29 @@ int main() {
 
     // Graphics
 
-    App gfx;
+    App app;
 
-    gfx.start();
+    app.addKeyCallback(GLFW_KEY_A, GLFW_PRESS, 0, [](){
+        std::cout << "A" << std::endl;
+        });
+
+    app.addKeyCallback(GLFW_KEY_ESCAPE, GLFW_PRESS, 0, [&app](){
+        app.close();
+    });
+
+    app.addMouseCallback(GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0, [](double x, double y){
+        std::cout << "Click: " << x << ", " << y << std::endl;
+    });
+
+    app.addWindowFocusCallback(true, [](){
+        std::cout << "Focus gained" << std::endl;
+    });
+
+    app.addWindowFocusCallback(false, [](){
+        std::cout << "Focus lost" << std::endl;
+    });
+
+    app.start();
 
     return 0;
     

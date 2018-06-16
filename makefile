@@ -25,7 +25,7 @@ endif
 CPPFLAGS+= -Xclang -flto-visibility-public-std $(CPPVER) $(WARN)
 ifeq ($(OS),Windows_NT)
 LDFLAGS+= $(CPPVER) $(WARN)
-LDLIBS= -L$(shell echo $(VULKAN_SDK))/Source/lib -lvulkan-1 -L$(shell echo $(GLFW))/Libs/ -lglfw3dll
+LDLIBS= -L$(shell echo $(VULKAN_SDK))/Source/lib -lvulkan-1 -L$(shell echo $(GLFW))/Libs/ -lglfw3dll 
 TARGET=$(NAME).exe
 else
 LDFLAGS+= $(CPPVER) $(WARN)

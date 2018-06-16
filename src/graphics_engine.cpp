@@ -5,6 +5,8 @@
 #include <iostream>
 #include <fstream>
 
+Graphics* Graphics::current_engine;
+
 Graphics::Graphics() {
     try{
         dimensions = vk::Extent2D(640, 480);
@@ -440,8 +442,116 @@ Graphics::~Graphics() {
         }
 
 void Graphics::start() {
+    current_engine = this;
+    glfwSetKeyCallback(window, glfw_key_callback);
+    glfwSetMouseButtonCallback(window, glfw_mouse_callback);
+    glfwSetWindowFocusCallback(window, glfw_window_focus_callback);
+    glfwSetCursorPosCallback(window, glfw_mouse_pos_callback);
     while (!glfw::glfwWindowShouldClose(window)) {
         glfw::glfwPollEvents();
         loop();
     }
+}
+
+void Graphics::close() {
+    glfwSetWindowShouldClose(window, (int)true);
+}
+
+void Graphics::glfw_key_callback(glfw::GLFWwindow *window, int key, int scancode, int action, int mods) {
+    (void)window;
+    (void)scancode;
+
+    #ifdef DEBUG
+    if (current_engine == nullptr) {
+        std::cerr << "Key-event (" << key << ") recored before initialization" << std::endl;
+        return;
+    }
+    #endif
+
+    auto range = current_engine->key_callbacks.equal_range(key);
+    for_each(
+        range.first,
+        range.second,
+        [action, mods](std::unordered_multimap<int, key_event>::value_type &x){
+            key_event* e = &x.second;
+            if(e->action == action && e->modifier == mods) {
+                e->callback();
+                }
+            }
+    );
+}
+
+void Graphics::glfw_mouse_callback(glfw::GLFWwindow *window, int key, int action, int mods) {
+
+    #ifdef DEBUG
+    if (current_engine == nullptr) {
+        std::cerr << "Mouse-event (" << key << ") recored before initialization" << std::endl;
+        return;
+    }
+    #endif
+
+    double xpos, ypos;
+    glfw::glfwGetCursorPos(window, &xpos, &ypos);
+
+    auto range = current_engine->mouse_callbacks.equal_range(key);
+    for_each(
+        range.first,
+        range.second,
+        [action, mods, xpos, ypos](std::unordered_multimap<int, mouse_event>::value_type &x){
+            mouse_event* e = &x.second;
+            if(e->action == action && e->modifier == mods) {
+                e->callback(xpos, ypos);
+                }
+            }
+    );
+}
+
+void Graphics::glfw_window_focus_callback(glfw::GLFWwindow *window, int status) {
+    (void)window;
+
+    #ifdef DEBUG
+    if (current_engine == nullptr) {
+        std::cerr << "Focus-event (" << status << ") recored before initialization" << std::endl;
+        return;
+    }
+    #endif
+
+    current_engine->has_focus = (bool)status;
+
+    for (auto &call : current_engine->window_focus_callbacks) {
+        if (current_engine->has_focus == call.focus) {
+            call.callback();
+        }
+    }
+}
+
+void Graphics::glfw_mouse_pos_callback(glfw::GLFWwindow *window, double xpos, double ypos) {
+    (void)window;
+
+    #ifdef DEBUG
+    if (current_engine == nullptr) {
+        std::cerr << "Mouse-pos-event recored before initialization" << std::endl;
+        return;
+    }
+    #endif
+
+    for (auto &call : current_engine->mouse_pos_callbacks) {
+        call(xpos, ypos);
+    }
+}
+
+void Graphics::addKeyCallback(int key, int action, int modifier, std::function<void()> callback) {
+    key_callbacks.emplace(key, key_event{action, modifier, callback});
+}
+
+void Graphics::addMouseCallback(int button, int action, int modifier, std::function<void(double xpos, double ypos)> callback) {
+    mouse_callbacks.emplace(button, mouse_event{action, modifier, callback});
+}
+
+void Graphics::addMousePosCallback(std::function<void(double xpos, double ypos)> callback) {
+    mouse_pos_callbacks.push_back(callback);
+}
+
+void Graphics::addWindowFocusCallback(bool focus, std::function<void()> callback) {
+    window_focus_callbacks.push_back(focus_event{focus, callback});
 }

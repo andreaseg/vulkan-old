@@ -2,6 +2,9 @@
 #define GRAPHICS_ENGINE_HPP
 
 #include "includes.hpp"
+#include <algorithm>
+#include <functional>
+#include <unordered_map>
 
 class Graphics {
     public:
@@ -19,8 +22,54 @@ class Graphics {
 
         void start();
 
+        void close();
+
+        // Forbid copy
+        Graphics(const Graphics&) = delete;
+
         ~Graphics();
+
+        void addKeyCallback(int key, int action, int modifier, std::function<void()> callback);
+        void addMouseCallback(int key, int action, int modifier, std::function<void(double xpos, double ypos)> callback);
+        void addMousePosCallback(std::function<void(double xpos, double ypos)> callback);
+        void addWindowFocusCallback(bool focus, std::function<void()> callback);
     private:
+        static Graphics* current_engine;
+
+        // GLFW
+        glfw::GLFWwindow* window;
+
+        bool has_focus;
+
+        struct key_event {
+            int action;
+            int modifier;
+            std::function<void()> callback;
+        };
+
+        struct mouse_event {
+            int action;
+            int modifier;
+            std::function<void(double xpos, double ypos)> callback;
+        };
+
+        struct focus_event {
+            bool focus;
+            std::function<void()> callback;
+        };
+        
+        std::unordered_multimap<int, key_event> key_callbacks;
+        std::unordered_multimap<int, mouse_event> mouse_callbacks;
+        std::vector<std::function<void(double xpos, double ypos)>> mouse_pos_callbacks;
+        std::vector<focus_event> window_focus_callbacks;
+
+        static void glfw_key_callback(glfw::GLFWwindow *window, int key, int scancode, int action, int mods);
+        static void glfw_mouse_callback(glfw::GLFWwindow *window, int key, int action, int mods);
+        static void glfw_mouse_pos_callback(glfw::GLFWwindow *window, double xpos, double ypos);
+        static void glfw_window_focus_callback(glfw::GLFWwindow *window, int status);
+
+
+        // Vulkan
         vk::Extent2D dimensions;
 
         vk::Instance instance;
@@ -29,7 +78,7 @@ class Graphics {
         uint32_t queue_family;
         vk::Queue queue;
         vk::SurfaceKHR surface;
-        glfw::GLFWwindow* window;
+        
         vk::SwapchainKHR swapchain;
         std::vector<vk::Image> swapChainImages;
         vk::Format swapChainImageFormat;
