@@ -79,7 +79,7 @@ void Graphics::create_instance(vk::ApplicationInfo app_info) {
     extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 
-    vk::InstanceCreateInfo create_instance_info = vk::InstanceCreateInfo(
+    vk::InstanceCreateInfo create_instance_info(
         vk::InstanceCreateFlags(),
         &app_info,                  // Application Info
         0,                          // Layer count
@@ -125,13 +125,13 @@ void Graphics::create_logical_device() {
     std::vector<char const*> device_level_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     float queuePriority = 0.0f;
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo = vk::DeviceQueueCreateInfo(
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo(
         vk::DeviceQueueCreateFlags(),
         queue_family,                   // Queue Family
         1,                              // Queue count
         &queuePriority                  // Queue priority
         );
-    vk::DeviceCreateInfo deviceCreateInfo = vk::DeviceCreateInfo(
+    vk::DeviceCreateInfo deviceCreateInfo(
         vk::DeviceCreateFlags(),
         1,                              // Queue create info count
         &deviceQueueCreateInfo,         // Queue create info
@@ -217,7 +217,7 @@ void Graphics::create_swapchain() {
     
     uint32_t min_image_count = (capabilities.maxImageCount > 0) ? std::min(capabilities.maxImageCount, capabilities.minImageCount + 1) : capabilities.minImageCount + 1;
 
-    vk::SwapchainCreateInfoKHR swap_chain_info = vk::SwapchainCreateInfoKHR(
+    vk::SwapchainCreateInfoKHR swap_chain_info(
         vk::SwapchainCreateFlagsKHR(),
         surface,                                    // SurfaceKHR
         min_image_count,                            // Min image count
@@ -254,7 +254,7 @@ void Graphics::create_image_views() {
 
 
     for (size_t i = 0; i < swapChainImages.size(); i++) {
-        vk::ImageViewCreateInfo create_info = vk::ImageViewCreateInfo(
+        vk::ImageViewCreateInfo create_info(
             vk::ImageViewCreateFlags(),
             swapChainImages[i],                     // Image
             vk::ImageViewType::e2D,                 // View type
@@ -296,7 +296,7 @@ vk::ShaderModule Graphics::load_precompiled_shader(const std::string &filename) 
     file.read(buffer.data(), size);
     file.close();
 
-    vk::ShaderModuleCreateInfo create_info = vk::ShaderModuleCreateInfo(
+    vk::ShaderModuleCreateInfo create_info(
         vk::ShaderModuleCreateFlags(),
         size, // Code size
         reinterpret_cast<const uint32_t*>(buffer.data()) // Code
@@ -315,7 +315,7 @@ void Graphics::create_render_pass() {
 
     assert(device);
 
-    vk::AttachmentDescription color_attachment = vk::AttachmentDescription(
+    vk::AttachmentDescription color_attachment(
         vk::AttachmentDescriptionFlags(),
         swapChainImageFormat,               // Format
         vk::SampleCountFlagBits::e1,        // Samples
@@ -327,12 +327,12 @@ void Graphics::create_render_pass() {
         vk::ImageLayout::ePresentSrcKHR     // Final layout
     );
 
-    vk::AttachmentReference color_attachment_ref = vk::AttachmentReference(
+    vk::AttachmentReference color_attachment_ref(
         0,                                          // Attachment
         vk::ImageLayout::eColorAttachmentOptimal    // Layout
     );
 
-    vk::SubpassDescription subpass = vk::SubpassDescription(
+    vk::SubpassDescription subpass(
         vk::SubpassDescriptionFlags(),
         vk::PipelineBindPoint::eGraphics,   // Pipeline bindpoint
         0,                                  // Input atachment count
@@ -345,7 +345,7 @@ void Graphics::create_render_pass() {
         nullptr                             // Preserve attachments
     );
 
-    vk::RenderPassCreateInfo create_info = vk::RenderPassCreateInfo(
+    vk::RenderPassCreateInfo create_info(
         vk::RenderPassCreateFlags(),
         1,                  // Attachment count
         &color_attachment,  // Attachments,
@@ -371,7 +371,7 @@ void Graphics::create_pipeline() {
     vk::ShaderModule fragment_shader = load_precompiled_shader("shaders/simple.frag.spv");
 
     
-    vk::PipelineShaderStageCreateInfo vert_stage_info = vk::PipelineShaderStageCreateInfo(
+    vk::PipelineShaderStageCreateInfo vert_stage_info(
         vk::PipelineShaderStageCreateFlags(),
         vk::ShaderStageFlagBits::eVertex,   // Stage
         vertex_shader,                      // Module
@@ -379,7 +379,7 @@ void Graphics::create_pipeline() {
         nullptr                             // Specialization
     );
 
-    vk::PipelineShaderStageCreateInfo frag_stage_info = vk::PipelineShaderStageCreateInfo(
+    vk::PipelineShaderStageCreateInfo frag_stage_info(
         vk::PipelineShaderStageCreateFlags(),
         vk::ShaderStageFlagBits::eFragment, // Stage
         fragment_shader,                    // Module
@@ -389,7 +389,7 @@ void Graphics::create_pipeline() {
 
     std::vector<vk::PipelineShaderStageCreateInfo> shader_stages = {vert_stage_info, frag_stage_info};
 
-    vk::PipelineVertexInputStateCreateInfo vertex_input_info = vk::PipelineVertexInputStateCreateInfo(
+    vk::PipelineVertexInputStateCreateInfo vertex_input_info(
         vk::PipelineVertexInputStateCreateFlags(),
         0,          // Bind description count
         nullptr,    // Bind descriptions
@@ -397,7 +397,7 @@ void Graphics::create_pipeline() {
         nullptr     // Attribute descriptions
     );
 
-    vk::PipelineInputAssemblyStateCreateInfo input_assembly = vk::PipelineInputAssemblyStateCreateInfo(
+    vk::PipelineInputAssemblyStateCreateInfo input_assembly(
         vk::PipelineInputAssemblyStateCreateFlags(),    // Flags
         vk::PrimitiveTopology::eTriangleList,           // Topology
         VK_FALSE                                        // Primitive restart enable
@@ -417,7 +417,7 @@ void Graphics::create_pipeline() {
         dimensions  // Extent
     );
 
-    vk::PipelineViewportStateCreateInfo viewport_state = vk::PipelineViewportStateCreateInfo(
+    vk::PipelineViewportStateCreateInfo viewport_state(
         vk::PipelineViewportStateCreateFlags(),
         1,          // Viewport count
         &viewport,  // Viewports
@@ -425,7 +425,7 @@ void Graphics::create_pipeline() {
         &scissors   // Scissors
     );
 
-    vk::PipelineRasterizationStateCreateInfo rasterizer = vk::PipelineRasterizationStateCreateInfo(
+    vk::PipelineRasterizationStateCreateInfo rasterizer(
         vk::PipelineRasterizationStateCreateFlags(), 
         VK_FALSE,                       // Depth clamp,
         VK_FALSE,                       // Rasterizer discard enable,
@@ -439,7 +439,7 @@ void Graphics::create_pipeline() {
         1.0f                            // Line width
     );
 
-    vk::PipelineMultisampleStateCreateInfo multisampling = vk::PipelineMultisampleStateCreateInfo(
+    vk::PipelineMultisampleStateCreateInfo multisampling(
         vk::PipelineMultisampleStateCreateFlags(),
         vk::SampleCountFlagBits::e1,    // Rasterization samples
         VK_FALSE,                       // Shading enable,
@@ -449,7 +449,7 @@ void Graphics::create_pipeline() {
         VK_FALSE                        // Alpha to one
     );
 
-    vk::PipelineColorBlendAttachmentState color_blend_attachment = vk::PipelineColorBlendAttachmentState(
+    vk::PipelineColorBlendAttachmentState color_blend_attachment(
         VK_FALSE,               // Blend enable
         vk::BlendFactor::eZero, // Source blend factor
         vk::BlendFactor::eZero, // Distant blend factor
@@ -460,7 +460,7 @@ void Graphics::create_pipeline() {
         vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA // Color write mask
     );
 
-    vk::PipelineColorBlendStateCreateInfo color_blending = vk::PipelineColorBlendStateCreateInfo(
+    vk::PipelineColorBlendStateCreateInfo color_blending(
         vk::PipelineColorBlendStateCreateFlags(),
         VK_FALSE,               // Logic op enable
         vk::LogicOp::eClear,    // Logic op
@@ -469,7 +469,7 @@ void Graphics::create_pipeline() {
     );
 
     std::vector<vk::DynamicState> dynamic_states = {vk::DynamicState::eViewport, vk::DynamicState::eLineWidth};
-    vk::PipelineDynamicStateCreateInfo dynamic_state = vk::PipelineDynamicStateCreateInfo(
+    vk::PipelineDynamicStateCreateInfo dynamic_state(
         vk::PipelineDynamicStateCreateFlags(),
         dynamic_states.size(),  // Dynamic state count
         &dynamic_states[0]      // Dynamic states
@@ -489,7 +489,7 @@ void Graphics::create_pipeline() {
         throw std::runtime_error("Failed to create pipeline layout");
     }
 
-    vk::GraphicsPipelineCreateInfo pipeline_create_info = vk::GraphicsPipelineCreateInfo(
+    vk::GraphicsPipelineCreateInfo pipeline_create_info(
         vk::PipelineCreateFlags(),
         shader_stages.size(),   // Stage count
         &shader_stages[0],      // Stages
