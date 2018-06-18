@@ -94,8 +94,9 @@ class Graphics {
 
         std::vector<vk::Semaphore> imageAvailableSemaphores;
         std::vector<vk::Semaphore> renderFinishedSemaphores;
-
+        std::vector<vk::Fence> inFlightFences;
         size_t current_frame = 0;
+
 
         void check_support();
         vk::ApplicationInfo generate_app_info();
@@ -111,7 +112,7 @@ class Graphics {
         void create_framebuffers();
         void create_command_pool();
         void create_command_buffers();
-        void create_semaphores();
+        void create_sync_objects();
 
 
         void draw_frame();

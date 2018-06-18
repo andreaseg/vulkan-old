@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <ctime>
 
 Graphics* Graphics::current_engine;
 
@@ -26,7 +27,7 @@ Graphics::Graphics() {
         create_framebuffers();
         create_command_pool();
         create_command_buffers();
-        create_semaphores();
+        create_sync_objects();
 
     }
     catch (vk::SystemError err) {
@@ -627,24 +628,45 @@ void Graphics::create_command_buffers() {
     }
 }
 
-void Graphics::create_semaphores() {
+void Graphics::create_sync_objects() {
     imageAvailableSemaphores.resize(MAX_CONCURRENT_FRAMES);
     renderFinishedSemaphores.resize(MAX_CONCURRENT_FRAMES);
+    inFlightFences.resize(MAX_CONCURRENT_FRAMES);
+
+    vk::FenceCreateInfo fence_create_info(
+        vk::FenceCreateFlagBits::eSignaled
+    );
     
     for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
         imageAvailableSemaphores[i] = device.createSemaphore(vk::SemaphoreCreateInfo());
         renderFinishedSemaphores[i] = device.createSemaphore(vk::SemaphoreCreateInfo());
+        inFlightFences[i] = device.createFence(fence_create_info);
     }
 }
 
+uint64_t framecounter = 0;
+std::clock_t old_time;
+
 void Graphics::draw_frame() {
-    uint64_t timeout = std::numeric_limits<uint64_t>::max();
+    const uint64_t timeout = std::numeric_limits<uint64_t>::max();
+
+    device.waitForFences(
+        1,                              // Fence count
+        &inFlightFences[current_frame], // Fences
+        VK_TRUE,                        // Wait for all
+        timeout                         // Timeout
+    );
+
+    device.resetFences(
+        1,                              // Fence count
+        &inFlightFences[current_frame]  // Fences
+    );
 
     uint32_t image_index;
     device.acquireNextImageKHR(swapchain, timeout, imageAvailableSemaphores[current_frame], nullptr, &image_index);
 
-    std::vector<vk::Semaphore> signal_semaphores = {renderFinishedSemaphores[current_frame]};
     std::vector<vk::Semaphore> wait_semaphores = {imageAvailableSemaphores[current_frame]};
+    std::vector<vk::Semaphore> signal_semaphores = {renderFinishedSemaphores[current_frame]};
     std::vector<vk::PipelineStageFlags> wait_stages = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
     vk::SubmitInfo submit_info(
         wait_semaphores.size(),         // Wait semaphores count
@@ -656,11 +678,11 @@ void Graphics::draw_frame() {
         &signal_semaphores[0]           // Signal semaphores
     );
 
-    queue.submit(submit_info, nullptr);
+    queue.submit(submit_info, inFlightFences[current_frame]);
 
     vk::PresentInfoKHR present_info(
-        wait_semaphores.size(), // Wait semaphore count
-        &wait_semaphores[0],    // Wait semaphores
+        signal_semaphores.size(), // Wait semaphore count
+        &signal_semaphores[0],    // Wait semaphores
         1,                      // Swapchain count
         &swapchain,             // Swapchains
         &image_index,           // Image index
@@ -670,9 +692,21 @@ void Graphics::draw_frame() {
     queue.presentKHR(present_info);
 
     current_frame = (current_frame + 1) % MAX_CONCURRENT_FRAMES;
+
+    framecounter++;
+    if ((framecounter + 1) % 1000 == 0) {
+        auto new_time = std::clock();
+        auto elapsed_time = new_time - old_time;
+        old_time = new_time;
+        std::cout << "Frames per second " << (1000.0 * 1000.0 / (float)elapsed_time) << std::endl;
+    }
+    
 }
 
 Graphics::~Graphics() {
+    for (auto &fence : inFlightFences) {
+        vkDestroyFence(device, fence, nullptr);
+    }
     for (auto &semaphore : imageAvailableSemaphores) {
         vkDestroySemaphore(device, semaphore, nullptr);
     }
