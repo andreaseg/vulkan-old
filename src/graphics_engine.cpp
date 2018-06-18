@@ -7,6 +7,8 @@
 
 Graphics* Graphics::current_engine;
 
+const size_t MAX_CONCURRENT_FRAMES = 2;
+
 Graphics::Graphics() {
     try{
         dimensions = vk::Extent2D(640, 480);
@@ -21,6 +23,10 @@ Graphics::Graphics() {
         create_image_views();
         create_render_pass();
         create_pipeline();
+        create_framebuffers();
+        create_command_pool();
+        create_command_buffers();
+        create_semaphores();
 
     }
     catch (vk::SystemError err) {
@@ -345,14 +351,23 @@ void Graphics::create_render_pass() {
         nullptr                             // Preserve attachments
     );
 
+    vk::SubpassDependency dependency(
+        VK_SUBPASS_EXTERNAL,                                // Source subpass
+        0,                                                  // Destination subpass
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,  // Source stage mask
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,  // Destination stage mask
+        vk::AccessFlags(),                                  // Source access mask
+        vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite // Destination access ask
+    );
+
     vk::RenderPassCreateInfo create_info(
         vk::RenderPassCreateFlags(),
         1,                  // Attachment count
         &color_attachment,  // Attachments,
         1,                  // Subpass count
         &subpass,           // Subpasses
-        0,                  // Dependency count
-        nullptr             // Subpass dependencies
+        1,                  // Dependency count
+        &dependency         // Subpass dependencies
     );
 
     renderPass = device.createRenderPass(create_info);
@@ -360,6 +375,8 @@ void Graphics::create_render_pass() {
     if (!renderPass) {
         throw std::runtime_error("Failed to create render passs");
     }
+
+    
 }
 
 void Graphics::create_pipeline() {
@@ -501,7 +518,7 @@ void Graphics::create_pipeline() {
         &multisampling,         // Multisampling
         nullptr,                // Depth stencil
         &color_blending,        // Color blend
-        &dynamic_state,         // Dynamic state
+        nullptr,                // Dynamic state
         pipelineLayout,         // Layout
         renderPass,             // Render pass
         0                       // Subpass
@@ -515,25 +532,170 @@ void Graphics::create_pipeline() {
 
     vkDestroyShaderModule(device, fragment_shader, nullptr);
     vkDestroyShaderModule(device, vertex_shader, nullptr);
+
 }
 
+void Graphics::create_framebuffers() {
+    assert(swapChainImageViews.size() != 0);
+    swapChainFrameBuffers.resize(swapChainImageViews.size());
+
+    for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+        std::vector<vk::ImageView> attachments = {swapChainImageViews[i]};
+
+        vk::FramebufferCreateInfo create_info(
+            vk::FramebufferCreateFlags(),
+            renderPass,                 // Render pass
+            attachments.size(),         // Attachment count
+            &attachments[0],            // Attachments
+            this->dimensions.width,     // Width
+            this->dimensions.height,    // Height
+            1                           // Layers
+        );
+
+        swapChainFrameBuffers[i] = device.createFramebuffer(create_info);
+
+        assert(swapChainFrameBuffers[i]);
+    }
+}
+
+void Graphics::create_command_pool() {
+    vk::CommandPoolCreateInfo create_info(
+        vk::CommandPoolCreateFlags(),
+        queue_family                // Queue to use
+    );
+
+    commandPool = device.createCommandPool(create_info);
+
+    assert(commandPool);
+}
+
+void Graphics::create_command_buffers() {
+    assert(swapChainFrameBuffers.size() != 0);
+    commandBuffers.resize(swapChainFrameBuffers.size());
+
+    vk::CommandBufferAllocateInfo alloc_info(
+        commandPool,
+        vk::CommandBufferLevel::ePrimary,
+        (uint32_t) commandBuffers.size()
+    );
+
+    commandBuffers = device.allocateCommandBuffers(alloc_info);
+
+    vk::ClearValue clear_color;
+    clear_color.color.setFloat32({0.0f, 0.0f, 0.0f, 1.0f});
+    std::vector<vk::ClearValue> clear_values = {clear_color};
+
+    vk::Rect2D render_area(
+        {0,0},              // Offset
+        this->dimensions    // Extent
+    );
 
 
+    for (size_t i = 0; i < commandBuffers.size(); i++) {
+
+        vk::CommandBuffer *cmd = &commandBuffers[i];
+
+        vk::CommandBufferBeginInfo begin_info(
+            vk::CommandBufferUsageFlagBits::eSimultaneousUse,
+            nullptr // Inheritance
+        );
+
+        cmd->begin(begin_info);
+
+        vk::RenderPassBeginInfo render_pass_info(
+            renderPass,                 // Render pass
+            swapChainFrameBuffers[i],   // Framebuffer
+            render_area,                // Render area
+            clear_values.size(),        // Clear value count
+            &clear_values[0]            // Clear values
+        );
+
+        cmd->beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
+
+        cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+
+        cmd->draw(
+            3, // Vertex count
+            1, // Instance count
+            0, // First vertex
+            0  // First instance
+        );
+
+        cmd->endRenderPass();
+
+        cmd->end();
+    }
+}
+
+void Graphics::create_semaphores() {
+    imageAvailableSemaphores.resize(MAX_CONCURRENT_FRAMES);
+    renderFinishedSemaphores.resize(MAX_CONCURRENT_FRAMES);
+    
+    for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
+        imageAvailableSemaphores[i] = device.createSemaphore(vk::SemaphoreCreateInfo());
+        renderFinishedSemaphores[i] = device.createSemaphore(vk::SemaphoreCreateInfo());
+    }
+}
+
+void Graphics::draw_frame() {
+    uint64_t timeout = std::numeric_limits<uint64_t>::max();
+
+    uint32_t image_index;
+    device.acquireNextImageKHR(swapchain, timeout, imageAvailableSemaphores[current_frame], nullptr, &image_index);
+
+    std::vector<vk::Semaphore> signal_semaphores = {renderFinishedSemaphores[current_frame]};
+    std::vector<vk::Semaphore> wait_semaphores = {imageAvailableSemaphores[current_frame]};
+    std::vector<vk::PipelineStageFlags> wait_stages = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
+    vk::SubmitInfo submit_info(
+        wait_semaphores.size(),         // Wait semaphores count
+        &wait_semaphores[0],            // Wait semaphores
+        wait_stages.data(),             // Wait stages
+        1,                              // Command buffer count
+        &commandBuffers[image_index],   // Command buffers
+        signal_semaphores.size(),       // Signal semaphores count
+        &signal_semaphores[0]           // Signal semaphores
+    );
+
+    queue.submit(submit_info, nullptr);
+
+    vk::PresentInfoKHR present_info(
+        wait_semaphores.size(), // Wait semaphore count
+        &wait_semaphores[0],    // Wait semaphores
+        1,                      // Swapchain count
+        &swapchain,             // Swapchains
+        &image_index,           // Image index
+        nullptr                 // Result array
+    );
+
+    queue.presentKHR(present_info);
+
+    current_frame = (current_frame + 1) % MAX_CONCURRENT_FRAMES;
+}
 
 Graphics::~Graphics() {
-            vkDestroyPipeline(device, graphicsPipeline, nullptr);
-            vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-            vkDestroyRenderPass(device, renderPass, nullptr);
-            for (auto &image_view: swapChainImageViews) {
-                vkDestroyImageView(device, image_view, nullptr);
-            }
-            vkDestroySwapchainKHR(device, swapchain, nullptr);
-            vkDestroySurfaceKHR((VkInstance)instance, VkSurfaceKHR(surface), nullptr);
-            device.destroy();
-            instance.destroy();
-            glfw::glfwDestroyWindow(window); 
-            glfw::glfwTerminate();
-        }
+    for (auto &semaphore : imageAvailableSemaphores) {
+        vkDestroySemaphore(device, semaphore, nullptr);
+    }
+    for (auto &semaphore : renderFinishedSemaphores) {
+        vkDestroySemaphore(device, semaphore, nullptr);
+    }
+    vkDestroyCommandPool(device, commandPool, nullptr);
+    for (auto &framebuffer : swapChainFrameBuffers) {
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+    }
+    vkDestroyPipeline(device, graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    vkDestroyRenderPass(device, renderPass, nullptr);
+    for (auto &image_view: swapChainImageViews) {
+        vkDestroyImageView(device, image_view, nullptr);
+    }
+    vkDestroySwapchainKHR(device, swapchain, nullptr);
+    vkDestroySurfaceKHR((VkInstance)instance, VkSurfaceKHR(surface), nullptr);
+    device.destroy();
+    instance.destroy();
+    glfw::glfwDestroyWindow(window); 
+    glfw::glfwTerminate();
+}
 
 void Graphics::start() {
     current_engine = this;
@@ -544,7 +706,10 @@ void Graphics::start() {
     while (!glfw::glfwWindowShouldClose(window)) {
         glfw::glfwPollEvents();
         loop();
+        draw_frame();
     }
+
+    device.waitIdle();
 }
 
 void Graphics::close() {

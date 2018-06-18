@@ -83,9 +83,19 @@ class Graphics {
         std::vector<vk::Image> swapChainImages;
         vk::Format swapChainImageFormat;
         std::vector<vk::ImageView> swapChainImageViews;
+
         vk::RenderPass renderPass;
         vk::PipelineLayout pipelineLayout;
         vk::Pipeline graphicsPipeline;
+
+        std::vector<vk::Framebuffer> swapChainFrameBuffers;
+        vk::CommandPool commandPool;
+        std::vector<vk::CommandBuffer> commandBuffers;
+
+        std::vector<vk::Semaphore> imageAvailableSemaphores;
+        std::vector<vk::Semaphore> renderFinishedSemaphores;
+
+        size_t current_frame = 0;
 
         void check_support();
         vk::ApplicationInfo generate_app_info();
@@ -98,7 +108,13 @@ class Graphics {
         void create_image_views();
         void create_render_pass();
         void create_pipeline();
+        void create_framebuffers();
+        void create_command_pool();
+        void create_command_buffers();
+        void create_semaphores();
 
+
+        void draw_frame();
         virtual void loop() = 0;
 };
 
