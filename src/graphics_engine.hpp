@@ -8,8 +8,8 @@
 
 class Graphics {
     public:
-        const char* AppName = "App name";
-        const char* EngineName = "Engine name";
+        const char* AppName = "Vulkan Tutorial";
+        const char* EngineName = "Vulkan Engine";
 
         uint32_t getWidth();
         uint32_t getHeight();
@@ -41,6 +41,8 @@ class Graphics {
 
         bool has_focus;
 
+        bool has_been_resized;
+
         struct key_event {
             int action;
             int modifier;
@@ -67,6 +69,7 @@ class Graphics {
         static void glfw_mouse_callback(glfw::GLFWwindow *window, int key, int action, int mods);
         static void glfw_mouse_pos_callback(glfw::GLFWwindow *window, double xpos, double ypos);
         static void glfw_window_focus_callback(glfw::GLFWwindow *window, int status);
+        static void window_size_callback(glfw::GLFWwindow *window, int width, int height);
 
 
         // Vulkan
@@ -114,6 +117,8 @@ class Graphics {
         void create_command_buffers();
         void create_sync_objects();
 
+        void recreate_swapchain();
+        void clean_up_swapchain();
 
         void draw_frame();
         virtual void loop() = 0;

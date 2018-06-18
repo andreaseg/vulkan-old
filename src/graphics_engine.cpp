@@ -52,6 +52,7 @@ uint32_t Graphics::getHeight() {
 void Graphics::setDimensions(uint32_t width, uint32_t height) {
     dimensions.width = width;
     dimensions.height = height;
+    has_been_resized = true;
 }
 
 void Graphics::check_support() {
@@ -219,8 +220,14 @@ void Graphics::create_swapchain() {
 
     // Selecting dimensions
     auto capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
-    this->dimensions.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, this->dimensions.width));
-    this->dimensions.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, this->dimensions.height));
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+        this->dimensions = capabilities.currentExtent;
+    } else {
+        int w, h;
+        glfwGetFramebufferSize(window, &w, &h);
+        this->dimensions.width = (uint32_t) w;
+        this->dimensions.height = (int32_t) h;
+    }
     
     uint32_t min_image_count = (capabilities.maxImageCount > 0) ? std::min(capabilities.maxImageCount, capabilities.minImageCount + 1) : capabilities.minImageCount + 1;
 
@@ -662,8 +669,19 @@ void Graphics::draw_frame() {
         &inFlightFences[current_frame]  // Fences
     );
 
+    if (has_been_resized) {
+        recreate_swapchain();
+    }
+
     uint32_t image_index;
-    device.acquireNextImageKHR(swapchain, timeout, imageAvailableSemaphores[current_frame], nullptr, &image_index);
+    vk::Result result = device.acquireNextImageKHR(swapchain, timeout, imageAvailableSemaphores[current_frame], nullptr, &image_index);
+
+    if (result == vk::Result::eErrorOutOfDateKHR) {
+        recreate_swapchain();
+        return;
+    } else if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+        throw std::runtime_error("Failed to acquire image");
+    }
 
     std::vector<vk::Semaphore> wait_semaphores = {imageAvailableSemaphores[current_frame]};
     std::vector<vk::Semaphore> signal_semaphores = {renderFinishedSemaphores[current_frame]};
@@ -689,7 +707,13 @@ void Graphics::draw_frame() {
         nullptr                 // Result array
     );
 
-    queue.presentKHR(present_info);
+    result = queue.presentKHR(present_info);
+
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
+        recreate_swapchain();
+    } else if (result != vk::Result::eSuccess) {
+        throw std::runtime_error("Failed to present image");
+    }
 
     current_frame = (current_frame + 1) % MAX_CONCURRENT_FRAMES;
 
@@ -703,28 +727,54 @@ void Graphics::draw_frame() {
     
 }
 
+void Graphics::recreate_swapchain() {
+    device.waitIdle();
+
+    clean_up_swapchain();
+
+    create_swapchain();
+    create_image_views();
+    create_render_pass();
+    create_pipeline();
+    create_framebuffers();
+    create_command_buffers();
+
+    this->has_been_resized = false;
+}
+
+void Graphics::clean_up_swapchain() {
+    for (auto &framebuffer : swapChainFrameBuffers) {
+        device.destroyFramebuffer(framebuffer);
+    }
+    
+    device.freeCommandBuffers(commandPool, commandBuffers);
+
+    device.destroyPipeline(graphicsPipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyRenderPass(renderPass);
+
+    for (auto &image_view: swapChainImageViews) {
+        device.destroyImageView(image_view);
+    }
+
+    device.destroySwapchainKHR(swapchain);
+}
+
 Graphics::~Graphics() {
+    clean_up_swapchain();
+
     for (auto &fence : inFlightFences) {
-        vkDestroyFence(device, fence, nullptr);
+        device.destroyFence(fence);
     }
     for (auto &semaphore : imageAvailableSemaphores) {
-        vkDestroySemaphore(device, semaphore, nullptr);
+        device.destroySemaphore(semaphore);
     }
     for (auto &semaphore : renderFinishedSemaphores) {
-        vkDestroySemaphore(device, semaphore, nullptr);
+        device.destroySemaphore(semaphore);
     }
-    vkDestroyCommandPool(device, commandPool, nullptr);
-    for (auto &framebuffer : swapChainFrameBuffers) {
-        vkDestroyFramebuffer(device, framebuffer, nullptr);
-    }
-    vkDestroyPipeline(device, graphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-    vkDestroyRenderPass(device, renderPass, nullptr);
-    for (auto &image_view: swapChainImageViews) {
-        vkDestroyImageView(device, image_view, nullptr);
-    }
-    vkDestroySwapchainKHR(device, swapchain, nullptr);
-    vkDestroySurfaceKHR((VkInstance)instance, VkSurfaceKHR(surface), nullptr);
+    device.destroyCommandPool(commandPool);
+    instance.destroySurfaceKHR(surface);
+
     device.destroy();
     instance.destroy();
     glfw::glfwDestroyWindow(window); 
@@ -737,6 +787,7 @@ void Graphics::start() {
     glfwSetMouseButtonCallback(window, glfw_mouse_callback);
     glfwSetWindowFocusCallback(window, glfw_window_focus_callback);
     glfwSetCursorPosCallback(window, glfw_mouse_pos_callback);
+    glfwSetWindowSizeCallback(window, window_size_callback);
     while (!glfw::glfwWindowShouldClose(window)) {
         glfw::glfwPollEvents();
         loop();
@@ -831,6 +882,11 @@ void Graphics::glfw_mouse_pos_callback(glfw::GLFWwindow *window, double xpos, do
     for (auto &call : current_engine->mouse_pos_callbacks) {
         call(xpos, ypos);
     }
+}
+
+void Graphics::window_size_callback(glfw::GLFWwindow *window, int width, int height) {
+    (void)window;
+    current_engine->setDimensions(width, height);
 }
 
 void Graphics::addKeyCallback(int key, int action, int modifier, std::function<void()> callback) {
