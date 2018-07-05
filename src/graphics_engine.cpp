@@ -1,5 +1,4 @@
 
-
 #include "graphics_engine.hpp"
 
 #include <iostream>
@@ -14,10 +13,9 @@ Graphics::Graphics() {
     try{
         dimensions = vk::Extent2D(640, 480);
         check_support();
-        auto app_info = generate_app_info();
-        create_instance(app_info);
+        create_instance();
         pick_physical_device();
-        pick_queue_family(vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute);
+        pick_queue_family();
         create_logical_device();
         create_surface();
         create_swapchain();
@@ -66,90 +64,29 @@ void Graphics::check_support() {
     }
 }
 
-vk::ApplicationInfo Graphics::generate_app_info() {
-    return vk::ApplicationInfo(AppName, 1, EngineName, 1, VK_API_VERSION_1_1);
-}
-
-void Graphics::create_instance(vk::ApplicationInfo app_info) {
-
-    // Extensions needed
-    std::vector<char const*> extensions;
-    {
-        uint32_t extensionCount = 0;
-        char const** glfw_extensions = glfw::glfwGetRequiredInstanceExtensions(&extensionCount);
-        for (uint32_t i = 0; i < extensionCount; i++) {
-            extensions.push_back(&glfw_extensions[i][0]);
-        }
-    }
-    #ifdef DEBUG
-        extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-    #endif
-    extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-    extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-
-    vk::InstanceCreateInfo create_instance_info(
-        vk::InstanceCreateFlags(),
-        &app_info,                  // Application Info
-        0,                          // Layer count
-        nullptr,                    // Layers
-        extensions.size(),          // Extension count
-        &extensions[0]              // Extensions
-        );
-
-    // Creating an instance
-    this->instance = vk::createInstance(create_instance_info);
+void Graphics::create_instance() {
+    this->instance = vk_help::create_glfw_instance(AppName, EngineName);
 }
 
 void Graphics::pick_physical_device() {
 
     assert(instance);
 
-    std::vector<vk::PhysicalDevice> physicalDevices = instance.enumeratePhysicalDevices();
-    assert(!physicalDevices.empty());
-
-    physical_device = physicalDevices[0];
+    physical_device = vk_help::pick_first_physical_device(instance);
 }
                 
-void Graphics::pick_queue_family(vk::QueueFlags flags) {
+void Graphics::pick_queue_family() {
 
     assert(physical_device);
 
-    std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physical_device.getQueueFamilyProperties();
-
-    size_t queueFamilyIndex = std::distance(queueFamilyProperties.begin(),
-                                                    std::find_if(queueFamilyProperties.begin(),
-                                                                    queueFamilyProperties.end(),
-                                                                    [flags](vk::QueueFamilyProperties const& qfp) { return qfp.queueFlags & flags; }));
-
-    assert(queueFamilyIndex < queueFamilyProperties.size());
-
-    this->queue_family = static_cast<uint32_t>(queueFamilyIndex);
+    this->queue_family = vk_help::pick_queue_family(physical_device);
 }
 
 void Graphics::create_logical_device() {
 
     assert(physical_device);
 
-    std::vector<char const*> device_level_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
-    float queuePriority = 0.0f;
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo(
-        vk::DeviceQueueCreateFlags(),
-        queue_family,                   // Queue Family
-        1,                              // Queue count
-        &queuePriority                  // Queue priority
-        );
-    vk::DeviceCreateInfo deviceCreateInfo(
-        vk::DeviceCreateFlags(),
-        1,                              // Queue create info count
-        &deviceQueueCreateInfo,         // Queue create info
-        0,                              // Enabled layer count
-        nullptr,                        // Enabled layers
-        device_level_extensions.size(), // Enabled extensions count
-        &device_level_extensions[0]     // Enabled extensions
-        );
-
-    device = physical_device.createDevice(deviceCreateInfo);
+    device = vk_help::create_device_khr(physical_device, queue_family);
 
     // Picking a queue
 
@@ -160,26 +97,10 @@ void Graphics::create_surface() {
 
     assert(instance);
 
-    if (dimensions.width == 0 || dimensions.height == 0) {
-        throw std::runtime_error("Error: Window dimensions not set");
-    }
+    auto res = vk_help::create_glfw_surface_khr(physical_device, instance, queue_family, dimensions, AppName);
 
-    glfw::glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    window = glfw::glfwCreateWindow(dimensions.width, dimensions.height, AppName, NULL, NULL);
-
-    // Attach Vulkan Surface to GLFW window
-    VkSurfaceKHR raw_surface(surface);
-    VkResult result = glfw::glfwCreateWindowSurface(instance, window, NULL, &raw_surface);
-    if (result != VK_SUCCESS) {
-        std::cerr << "GLFW: Unable to create surface, error code " << static_cast<int>(result) << std::endl;
-        exit(-1);
-    }
-    surface = (vk::SurfaceKHR)raw_surface;
-
-    if (!physical_device.getSurfaceSupportKHR(this->queue_family, surface)) {
-        std::cerr << "Surface not supported in queue family." << std::endl;
-        exit(-1);
-    }
+    window = std::get<0>(res);
+    surface = std::get<1>(res);
 }
 
 void Graphics::create_swapchain() {

@@ -106,10 +106,9 @@ class Graphics {
 
 
         void check_support();
-        vk::ApplicationInfo generate_app_info();
-        void create_instance(vk::ApplicationInfo app_info);
+        void create_instance();
         void pick_physical_device();
-        void pick_queue_family(vk::QueueFlags flags);
+        void pick_queue_family();
         void create_logical_device();
         void create_surface();
         void create_swapchain();
