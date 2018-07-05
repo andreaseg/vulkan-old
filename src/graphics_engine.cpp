@@ -636,18 +636,16 @@ void Graphics::create_command_buffers() {
 }
 
 void Graphics::create_sync_objects() {
-    imageAvailableSemaphores.resize(MAX_CONCURRENT_FRAMES);
-    renderFinishedSemaphores.resize(MAX_CONCURRENT_FRAMES);
-    inFlightFences.resize(MAX_CONCURRENT_FRAMES);
+    frameSyncObjects.resize(MAX_CONCURRENT_FRAMES);
 
     vk::FenceCreateInfo fence_create_info(
         vk::FenceCreateFlagBits::eSignaled
     );
     
-    for (size_t i = 0; i < MAX_CONCURRENT_FRAMES; i++) {
-        imageAvailableSemaphores[i] = device.createSemaphore(vk::SemaphoreCreateInfo());
-        renderFinishedSemaphores[i] = device.createSemaphore(vk::SemaphoreCreateInfo());
-        inFlightFences[i] = device.createFence(fence_create_info);
+    for (auto &f : frameSyncObjects) {
+        f.imageAvailableSemaphore = device.createSemaphore(vk::SemaphoreCreateInfo());
+        f.renderFinishedSemaphore = device.createSemaphore(vk::SemaphoreCreateInfo());
+        f.inFlightFence = device.createFence(fence_create_info);
     }
 }
 
@@ -659,14 +657,14 @@ void Graphics::draw_frame() {
 
     device.waitForFences(
         1,                              // Fence count
-        &inFlightFences[current_frame], // Fences
+        &frameSyncObjects[current_frame].inFlightFence, // Fences
         VK_TRUE,                        // Wait for all
         timeout                         // Timeout
     );
 
     device.resetFences(
         1,                              // Fence count
-        &inFlightFences[current_frame]  // Fences
+        &frameSyncObjects[current_frame].inFlightFence  // Fences
     );
 
     if (has_been_resized) {
@@ -674,7 +672,7 @@ void Graphics::draw_frame() {
     }
 
     uint32_t image_index;
-    vk::Result result = device.acquireNextImageKHR(swapchain, timeout, imageAvailableSemaphores[current_frame], nullptr, &image_index);
+    vk::Result result = device.acquireNextImageKHR(swapchain, timeout, frameSyncObjects[current_frame].imageAvailableSemaphore, nullptr, &image_index);
 
     if (result == vk::Result::eErrorOutOfDateKHR) {
         recreate_swapchain();
@@ -683,8 +681,8 @@ void Graphics::draw_frame() {
         throw std::runtime_error("Failed to acquire image");
     }
 
-    std::vector<vk::Semaphore> wait_semaphores = {imageAvailableSemaphores[current_frame]};
-    std::vector<vk::Semaphore> signal_semaphores = {renderFinishedSemaphores[current_frame]};
+    std::vector<vk::Semaphore> wait_semaphores = {frameSyncObjects[current_frame].imageAvailableSemaphore};
+    std::vector<vk::Semaphore> signal_semaphores = {frameSyncObjects[current_frame].renderFinishedSemaphore};
     std::vector<vk::PipelineStageFlags> wait_stages = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
     vk::SubmitInfo submit_info(
         wait_semaphores.size(),         // Wait semaphores count
@@ -696,7 +694,7 @@ void Graphics::draw_frame() {
         &signal_semaphores[0]           // Signal semaphores
     );
 
-    queue.submit(submit_info, inFlightFences[current_frame]);
+    queue.submit(submit_info, frameSyncObjects[current_frame].inFlightFence);
 
     vk::PresentInfoKHR present_info(
         signal_semaphores.size(), // Wait semaphore count
@@ -763,14 +761,10 @@ void Graphics::clean_up_swapchain() {
 Graphics::~Graphics() {
     clean_up_swapchain();
 
-    for (auto &fence : inFlightFences) {
-        device.destroyFence(fence);
-    }
-    for (auto &semaphore : imageAvailableSemaphores) {
-        device.destroySemaphore(semaphore);
-    }
-    for (auto &semaphore : renderFinishedSemaphores) {
-        device.destroySemaphore(semaphore);
+    for (auto &sync_objects : frameSyncObjects) {
+        device.destroyFence(sync_objects.inFlightFence);
+        device.destroySemaphore(sync_objects.imageAvailableSemaphore);
+        device.destroySemaphore(sync_objects.renderFinishedSemaphore);
     }
     device.destroyCommandPool(commandPool);
     instance.destroySurfaceKHR(surface);

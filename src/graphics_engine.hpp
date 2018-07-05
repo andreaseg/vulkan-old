@@ -6,6 +6,12 @@
 #include <functional>
 #include <unordered_map>
 
+struct FrameSyncObjects {
+    vk::Fence inFlightFence;
+    vk::Semaphore imageAvailableSemaphore;
+    vk::Semaphore renderFinishedSemaphore;
+};
+
 class Graphics {
     public:
         const char* AppName = "Vulkan Tutorial";
@@ -95,9 +101,7 @@ class Graphics {
         vk::CommandPool commandPool;
         std::vector<vk::CommandBuffer> commandBuffers;
 
-        std::vector<vk::Semaphore> imageAvailableSemaphores;
-        std::vector<vk::Semaphore> renderFinishedSemaphores;
-        std::vector<vk::Fence> inFlightFences;
+        std::vector<FrameSyncObjects> frameSyncObjects;
         size_t current_frame = 0;
 
 
