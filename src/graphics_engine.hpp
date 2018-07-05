@@ -22,8 +22,6 @@ class Graphics {
 
         void setDimensions(uint32_t width, uint32_t height);
 
-        vk::ShaderModule load_precompiled_shader(const std::string &filename);
-
         Graphics();
 
         void start();

@@ -1,5 +1,6 @@
 #include "vulkan_helper.hpp"
 #include <iostream>
+#include <fstream>
 
 namespace vk_help {
     vk::Instance create_glfw_instance(const std::string &app_name, const std::string &engine_name, const std::vector<char const*> *optional_extensions) {
@@ -110,5 +111,137 @@ namespace vk_help {
         return std::tuple<glfw::GLFWwindow*, vk::SurfaceKHR>(window, surface);
     }
 
-    
+    vk::ShaderModule load_precompiled_shader(const vk::Device &device, const std::string &filename) {
+
+        // Load binary shader data
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+        if(!file.is_open()) {
+            throw std::runtime_error("Could not open shader");
+        }
+
+        size_t size = (size_t)file.tellg();
+        std::vector<char> buffer(size);
+
+        file.seekg(0);
+        file.read(buffer.data(), size);
+        file.close();
+
+        vk::ShaderModuleCreateInfo create_info(
+            vk::ShaderModuleCreateFlags(),
+            size, // Code size
+            reinterpret_cast<const uint32_t*>(buffer.data()) // Code
+        );
+
+        vk::ShaderModule shader = device.createShaderModule(create_info);
+
+        if(!shader) {
+            throw std::runtime_error("Failed to create shader");
+        }
+
+        return shader;
+    }
+
+    std::tuple<vk::SwapchainKHR, vk::Format> create_standard_swapchain(const vk::PhysicalDevice &physical_device, const vk::Device &device, const vk::SurfaceKHR &surface, vk::Extent2D dimensions, glfw::GLFWwindow *window, uint32_t queue_family) {
+        vk::Format image_format;
+        vk::ColorSpaceKHR color_space;
+
+        // Selecting format for swapchain
+        auto surface_formats = physical_device.getSurfaceFormatsKHR(surface);
+        if (surface_formats.size() == 1 && surface_formats[0].format == vk::Format::eUndefined) {
+            image_format = vk::Format::eB8G8R8A8Unorm;
+            color_space = vk::ColorSpaceKHR::eSrgbNonlinear;
+        } else if (std::any_of(surface_formats.begin(), surface_formats.end(), 
+            [](vk::SurfaceFormatKHR const& f) {return f.format == vk::Format::eUndefined && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+            })) {
+            image_format = vk::Format::eB8G8R8A8Unorm;
+            color_space = vk::ColorSpaceKHR::eSrgbNonlinear;
+        } else {
+            image_format = surface_formats[0].format;
+            color_space = surface_formats[0].colorSpace;
+        }
+
+        vk::PresentModeKHR present_mode;
+
+        // Selecting presentation mode
+        auto presentation_modes = physical_device.getSurfacePresentModesKHR(surface);
+        if (std::any_of(presentation_modes.begin(), presentation_modes.end(), [](vk::PresentModeKHR const& p){return p == vk::PresentModeKHR::eMailbox;})) {
+            present_mode = vk::PresentModeKHR::eMailbox;
+        } else if (std::any_of(presentation_modes.begin(), presentation_modes.end(), [](vk::PresentModeKHR const& p){return p == vk::PresentModeKHR::eImmediate;})) {
+            present_mode = vk::PresentModeKHR::eImmediate;
+        } else {
+            present_mode = vk::PresentModeKHR::eFifo;
+        }
+
+        // Selecting dimensions
+        auto capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            dimensions = capabilities.currentExtent;
+        } else {
+            int w, h;
+            glfwGetFramebufferSize(window, &w, &h);
+            dimensions.width = (uint32_t) w;
+            dimensions.height = (int32_t) h;
+        }
+        
+        uint32_t min_image_count = (capabilities.maxImageCount > 0) ? std::min(capabilities.maxImageCount, capabilities.minImageCount + 1) : capabilities.minImageCount + 1;
+
+        vk::SwapchainCreateInfoKHR swap_chain_info(
+            vk::SwapchainCreateFlagsKHR(),
+            surface,                                    // SurfaceKHR
+            min_image_count,                            // Min image count
+            image_format,                               // Image format
+            color_space,                                // Color space
+            dimensions,                                 // Extent
+            1,                                          // Image array layers
+            vk::ImageUsageFlagBits::eColorAttachment,   // Image usage flags
+            vk::SharingMode::eExclusive,                // Image sharing mode
+            1,                                          // Queue family index count
+            &queue_family,                              // Queue family indices
+            capabilities.currentTransform,              // Surface transform flags
+            vk::CompositeAlphaFlagBitsKHR::eOpaque,     // Composite alpha flags
+            present_mode,                               // Present mode
+            VK_TRUE,                                    // Clipped
+            nullptr                                     // Old swapchain
+        );
+
+        vk::SwapchainKHR swapchain = device.createSwapchainKHR(swap_chain_info);
+
+        if (!swapchain) {
+            throw std::runtime_error("Failed to create swapchain");
+        }
+
+        return std::tuple<vk::SwapchainKHR, vk::Format>(swapchain, image_format);
+
+        }
+
+    std::vector<vk::ImageView> create_swapchain_image_views(const vk::Device &device, const std::vector<vk::Image> &swapChainImages, const vk::Format &swapChainImageFormat) {
+        std::vector<vk::ImageView> swapChainImageViews(swapChainImages.size());
+
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+            vk::ImageViewCreateInfo create_info(
+                vk::ImageViewCreateFlags(),
+                swapChainImages[i],                     // Image
+                vk::ImageViewType::e2D,                 // View type
+                swapChainImageFormat,                   // Format
+                vk::ComponentMapping(                   // Components
+                    vk::ComponentSwizzle::eIdentity,    // R
+                    vk::ComponentSwizzle::eIdentity,    // G
+                    vk::ComponentSwizzle::eIdentity,    // B
+                    vk::ComponentSwizzle::eIdentity     // A
+                ),                 
+                vk::ImageSubresourceRange(              // Subresource range
+                    vk::ImageAspectFlagBits::eColor,    // Aspect mask
+                    0,                                  // Base mip level
+                    1,                                  // Level count
+                    0,                                  // Base array layer
+                    1                                   // Layer count
+                )          
+            );
+
+            swapChainImageViews[i] = device.createImageView(create_info);
+        }
+
+        return swapChainImageViews;
+    }
 }
