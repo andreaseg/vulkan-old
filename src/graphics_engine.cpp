@@ -8,6 +8,42 @@ Graphics* Graphics::current_engine;
 
 const size_t MAX_CONCURRENT_FRAMES = 2;
 
+const std::vector<Vertex> vertices = {
+    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+};
+
+vk::VertexInputBindingDescription Vertex::getBindingDescription() {
+    vk::VertexInputBindingDescription desc = vk::VertexInputBindingDescription(
+        0,                              // Binding
+        sizeof(Vertex),                 // Stride
+        vk::VertexInputRate::eVertex    // Input rate
+    );
+
+    return desc;
+}
+
+std::array<vk::VertexInputAttributeDescription, 2>  Vertex::getAttributeDescriptions() {
+    std::array<vk::VertexInputAttributeDescription, 2> attribs;
+
+    attribs[0] = vk::VertexInputAttributeDescription(
+        0,                          // Shader location
+        0,                          // Binding
+        vk::Format::eR32G32Sfloat,  // Format
+        offsetof(Vertex, pos)       // Offset
+    );
+
+    attribs[1] = vk::VertexInputAttributeDescription(
+        1,                              // Shader location
+        0,                              // Binding
+        vk::Format::eR32G32B32Sfloat,   // Format
+        offsetof(Vertex, color)         // Offset
+    );
+
+    return attribs;
+}
+
 Graphics::Graphics() {
     try{
         dimensions = vk::Extent2D(640, 480);
@@ -23,6 +59,7 @@ Graphics::Graphics() {
         create_pipeline();
         create_framebuffers();
         create_command_pool();
+        create_vertex_buffers();
         create_command_buffers();
         create_sync_objects();
 
@@ -212,12 +249,15 @@ void Graphics::create_pipeline() {
 
     std::vector<vk::PipelineShaderStageCreateInfo> shader_stages = {vert_stage_info, frag_stage_info};
 
+    vk::VertexInputBindingDescription binding_description = Vertex::getBindingDescription();
+    std::array<vk::VertexInputAttributeDescription, 2> attrib_description = Vertex::getAttributeDescriptions();
+
     vk::PipelineVertexInputStateCreateInfo vertex_input_info(
         vk::PipelineVertexInputStateCreateFlags(),
-        0,          // Bind description count
-        nullptr,    // Bind descriptions
-        0,          // Attribute description count
-        nullptr     // Attribute descriptions
+        1,                                      // Bind description count
+        &binding_description,                   // Bind descriptions
+        (uint32_t) attrib_description.size(),   // Attribute description count
+        attrib_description.data()               // Attribute descriptions
     );
 
     vk::PipelineInputAssemblyStateCreateInfo input_assembly(
@@ -336,8 +376,8 @@ void Graphics::create_pipeline() {
         throw std::runtime_error("Failed to create graphics pipeline");
     }
 
-    vkDestroyShaderModule(device, fragment_shader, nullptr);
-    vkDestroyShaderModule(device, vertex_shader, nullptr);
+    device.destroyShaderModule(fragment_shader);
+    device.destroyShaderModule(vertex_shader);
 
 }
 
@@ -373,6 +413,51 @@ void Graphics::create_command_pool() {
     commandPool = device.createCommandPool(create_info);
 
     assert(commandPool);
+}
+
+void Graphics::create_vertex_buffers() {
+    vk::DeviceSize buffer_size = sizeof(vertices[0]) * vertices.size();
+
+    vk::BufferCreateInfo create_info(
+        vk::BufferCreateFlags(),
+        buffer_size,                            // Buffer size
+        vk::BufferUsageFlagBits::eVertexBuffer, // Buffer usage flags
+        vk::SharingMode::eExclusive,            // Sharing mode
+        0,                                      // Queue family index count
+        nullptr                                 // Queue family indices
+    );
+    vertexBuffer = device.createBuffer(create_info);
+
+    vk::MemoryRequirements mem_req = device.getBufferMemoryRequirements(vertexBuffer);
+    vk::PhysicalDeviceMemoryProperties mem_props = physical_device.getMemoryProperties();
+
+    uint32_t mem_index = 4294967295;
+
+    vk::MemoryPropertyFlags prop_flag_reqs = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+    for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
+        if ((mem_req.memoryTypeBits & (1 << i))
+            && ((mem_props.memoryTypes[i].propertyFlags & prop_flag_reqs) == prop_flag_reqs)) {
+            mem_index = i;
+            break;
+        }
+    }
+
+    if (mem_index == 4294967295) {
+        std::cerr << "Could not allocate memory" << std::endl;
+    }
+
+    vk::MemoryAllocateInfo alloc_info(
+        mem_req.size,   // Size
+        mem_index       // Index
+    );
+
+    vertexBufferMemory = device.allocateMemory(alloc_info);
+    device.bindBufferMemory(vertexBuffer, vertexBufferMemory, 0 /* Offset */);
+
+    void* data = device.mapMemory(vertexBufferMemory, 0, buffer_size, vk::MemoryMapFlags());
+    memcpy(data, vertices.data(), (size_t) buffer_size);
+    device.unmapMemory(vertexBufferMemory);
 }
 
 void Graphics::create_command_buffers() {
@@ -420,8 +505,18 @@ void Graphics::create_command_buffers() {
 
         cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
+        vk::Buffer vertex_buffers[] = {vertexBuffer};
+        vk::DeviceSize vertex_buffer_offsets[] = {0};
+
+        cmd->bindVertexBuffers(
+            0,                      // First binding
+            1,                      // Buffer count
+            vertex_buffers,         // Buffers
+            vertex_buffer_offsets   // Offsets
+        );
+
         cmd->draw(
-            3, // Vertex count
+            (uint32_t) vertices.size(), // Vertex count
             1, // Instance count
             0, // First vertex
             0  // First instance
@@ -431,6 +526,8 @@ void Graphics::create_command_buffers() {
 
         cmd->end();
     }
+
+
 }
 
 void Graphics::create_sync_objects() {
@@ -558,6 +655,9 @@ void Graphics::clean_up_swapchain() {
 
 Graphics::~Graphics() {
     clean_up_swapchain();
+
+    device.destroyBuffer(vertexBuffer);
+    device.freeMemory(vertexBufferMemory);
 
     for (auto &sync_objects : frameSyncObjects) {
         device.destroyFence(sync_objects.inFlightFence);

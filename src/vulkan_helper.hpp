@@ -11,6 +11,7 @@ namespace glfw{
     #define GLFW_EXPOSE_NATIVE_WIN32
     #include <GLFW/glfw3native.h>
 }
+#include <glm/glm.hpp>
 
 namespace vk_help {
     vk::Instance create_glfw_instance(const std::string &app_name, const std::string &engine_name, const std::vector<char const*> *optional_extensions = nullptr);

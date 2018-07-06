@@ -5,6 +5,15 @@
 #include <algorithm>
 #include <functional>
 #include <unordered_map>
+#include <array>
+
+struct Vertex {
+    glm::vec2 pos;
+    glm::vec3 color;
+
+    static vk::VertexInputBindingDescription getBindingDescription();
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions();
+};
 
 struct FrameSyncObjects {
     vk::Fence inFlightFence;
@@ -102,6 +111,9 @@ class Graphics {
         std::vector<FrameSyncObjects> frameSyncObjects;
         size_t current_frame = 0;
 
+        vk::Buffer vertexBuffer;
+        vk::DeviceMemory vertexBufferMemory;
+
 
         void check_support();
         void create_instance();
@@ -115,6 +127,7 @@ class Graphics {
         void create_pipeline();
         void create_framebuffers();
         void create_command_pool();
+        void create_vertex_buffers();
         void create_command_buffers();
         void create_sync_objects();
 
