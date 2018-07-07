@@ -1,6 +1,6 @@
 NAME= main
 WARN= -Wall -Wextra
-CPPVER= -std=c++14
+CPPVER= -std=c++17
 SRCS= $(wildcard src/*.cpp)
 CC=clang
 CXX=clang

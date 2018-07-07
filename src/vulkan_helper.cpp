@@ -3,7 +3,7 @@
 #include <fstream>
 
 namespace vk_help {
-    vk::Instance create_glfw_instance(const std::string &app_name, const std::string &engine_name, const std::vector<char const*> *optional_extensions) {
+    vk::Instance create_glfw_instance(const std::string &app_name, const std::string &engine_name, const std::optional<std::vector<char const*>> optional_extensions) {
         std::vector<char const*> extensions;
         {
             uint32_t extensionCount = 0;
@@ -18,8 +18,8 @@ namespace vk_help {
         extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
         extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 
-        if (optional_extensions != nullptr) {
-            for (auto &ext : *optional_extensions) {
+        if (optional_extensions) {
+            for (auto &ext : optional_extensions.value()) {
                 extensions.push_back(ext);
             }
         }
