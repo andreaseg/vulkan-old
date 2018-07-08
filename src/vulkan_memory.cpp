@@ -33,5 +33,37 @@ namespace vk_mem {
 
         return {buffer, memory};
     }
+
+    void copy_buffer(const vk::Device &device, const vk::Queue &queue, const vk::CommandPool &command_pool, vk::Buffer &source, vk::Buffer &dest, vk::DeviceSize size) {
+        vk::CommandBufferAllocateInfo alloc_info(
+            command_pool,
+            vk::CommandBufferLevel::ePrimary,
+            1
+        );
+
+        vk::CommandBuffer command_buffer = device.allocateCommandBuffers(alloc_info)[0];
+
+        vk::CommandBufferBeginInfo begin_info(
+            vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+        );
+
+        command_buffer.begin(begin_info);
+        {
+            vk::BufferCopy copy_region(
+                0,      // Source offset
+                0,      // Destination offset
+                size    // Size
+            );
+            
+            command_buffer.copyBuffer(source, dest, copy_region);
+        }
+        command_buffer.end();
+
+        vk::SubmitInfo submit_info(0, nullptr, nullptr, 1, &command_buffer, 0, nullptr);
+
+        queue.submit(submit_info, nullptr);
+        queue.waitIdle();
+        device.freeCommandBuffers(command_pool, command_buffer);
+    }
     
 }
