@@ -106,7 +106,7 @@ namespace vk_help {
             exit(-1);
         }
 
-        return std::tuple<glfw::GLFWwindow*, vk::SurfaceKHR>(window, surface);
+        return {window, surface};
     }
 
     vk::ShaderModule load_precompiled_shader(const vk::Device &device, const std::string &filename) {
@@ -209,7 +209,7 @@ namespace vk_help {
             throw std::runtime_error("Failed to create swapchain");
         }
 
-        return std::tuple<vk::SwapchainKHR, vk::Format>(swapchain, image_format);
+        return {swapchain, image_format};
 
         }
 

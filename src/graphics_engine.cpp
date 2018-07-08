@@ -418,42 +418,9 @@ void Graphics::create_command_pool() {
 void Graphics::create_vertex_buffers() {
     vk::DeviceSize buffer_size = sizeof(vertices[0]) * vertices.size();
 
-    vk::BufferCreateInfo create_info(
-        vk::BufferCreateFlags(),
-        buffer_size,                            // Buffer size
-        vk::BufferUsageFlagBits::eVertexBuffer, // Buffer usage flags
-        vk::SharingMode::eExclusive,            // Sharing mode
-        0,                                      // Queue family index count
-        nullptr                                 // Queue family indices
-    );
-    vertexBuffer = device.createBuffer(create_info);
-
-    vk::MemoryRequirements mem_req = device.getBufferMemoryRequirements(vertexBuffer);
-    vk::PhysicalDeviceMemoryProperties mem_props = physical_device.getMemoryProperties();
-
-    uint32_t mem_index = 4294967295;
-
-    vk::MemoryPropertyFlags prop_flag_reqs = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
-
-    for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
-        if ((mem_req.memoryTypeBits & (1 << i))
-            && ((mem_props.memoryTypes[i].propertyFlags & prop_flag_reqs) == prop_flag_reqs)) {
-            mem_index = i;
-            break;
-        }
-    }
-
-    if (mem_index == 4294967295) {
-        std::cerr << "Could not allocate memory" << std::endl;
-    }
-
-    vk::MemoryAllocateInfo alloc_info(
-        mem_req.size,   // Size
-        mem_index       // Index
-    );
-
-    vertexBufferMemory = device.allocateMemory(alloc_info);
-    device.bindBufferMemory(vertexBuffer, vertexBufferMemory, 0 /* Offset */);
+    auto res = vk_mem::create_buffer(physical_device, device, buffer_size, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    vertexBuffer = std::get<0>(res);
+    vertexBufferMemory = std::get<1>(res);
 
     void* data = device.mapMemory(vertexBufferMemory, 0, buffer_size, vk::MemoryMapFlags());
     memcpy(data, vertices.data(), (size_t) buffer_size);
