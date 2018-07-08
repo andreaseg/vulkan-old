@@ -12,10 +12,9 @@ namespace glfw{
     #include <GLFW/glfw3native.h>
 }
 #include <glm/glm.hpp>
-#include <optional>
 
 namespace vk_help {
-    vk::Instance create_glfw_instance(const std::string &app_name, const std::string &engine_name, const std::optional<std::vector<char const*>> optional_extensions = {});
+    vk::Instance create_glfw_instance(const std::string &app_name, const std::string &engine_name, const std::vector<char const*> optional_extensions = {});
 
     vk::PhysicalDevice pick_first_physical_device(const vk::Instance &instance);
 
