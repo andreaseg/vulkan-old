@@ -9,9 +9,15 @@ Graphics* Graphics::current_engine;
 const size_t MAX_CONCURRENT_FRAMES = 2;
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 
+    2, 3, 0
 };
 
 vk::VertexInputBindingDescription Vertex::getBindingDescription() {
@@ -60,6 +66,7 @@ Graphics::Graphics() {
         create_framebuffers();
         create_command_pool();
         create_vertex_buffers();
+        create_index_buffers();
         create_command_buffers();
         create_sync_objects();
 
@@ -437,6 +444,25 @@ void Graphics::create_vertex_buffers() {
     
 }
 
+void Graphics::create_index_buffers() {
+    vk::DeviceSize buffer_size = sizeof(indices[0]) * indices.size();
+
+    auto [staging_buffer, staging_memory] = memoryManager.create_transfer_buffer(buffer_size);
+
+    void* data = device.mapMemory(staging_memory, 0, buffer_size, vk::MemoryMapFlags());
+    memcpy(data, indices.data(), (size_t) buffer_size);
+    device.unmapMemory(staging_memory);
+
+    auto res = memoryManager.create_index_buffer(buffer_size);
+    indexBuffer = std::get<0>(res);
+    indexBufferMemory = std::get<1>(res);
+
+    memoryManager.copy_buffer(staging_buffer, indexBuffer, buffer_size);
+
+    device.destroy(staging_buffer);
+    device.freeMemory(staging_memory);
+}
+
 void Graphics::create_command_buffers() {
     assert(swapChainFrameBuffers.size() != 0);
     commandBuffers.resize(swapChainFrameBuffers.size());
@@ -492,10 +518,17 @@ void Graphics::create_command_buffers() {
             vertex_buffer_offsets   // Offsets
         );
 
-        cmd->draw(
-            (uint32_t) vertices.size(), // Vertex count
+        cmd->bindIndexBuffer(
+            indexBuffer,            // Buffer
+            0,                      // Offset
+            vk::IndexType::eUint16  // Index type
+        );
+
+        cmd->drawIndexed(
+            (uint32_t) indices.size(), // Index count
             1, // Instance count
-            0, // First vertex
+            0, // First index,
+            0, // Vertex offset
             0  // First instance
         );
 
@@ -635,6 +668,9 @@ Graphics::~Graphics() {
 
     device.destroyBuffer(vertexBuffer);
     device.freeMemory(vertexBufferMemory);
+
+    device.destroyBuffer(indexBuffer);
+    device.freeMemory(indexBufferMemory);
 
     for (auto &sync_objects : frameSyncObjects) {
         device.destroyFence(sync_objects.inFlightFence);

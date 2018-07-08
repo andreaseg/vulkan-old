@@ -58,6 +58,14 @@ namespace vk_mem {
         );
     }
 
+    std::tuple<vk::Buffer, vk::DeviceMemory> Manager::create_index_buffer(vk::DeviceSize size) {
+        return create_buffer(
+            *p_physical_device, *p_device, size,
+            vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+            vk::MemoryPropertyFlagBits::eDeviceLocal
+        );
+    }
+
     void Manager::copy_buffer(vk::Buffer &src, vk::Buffer &dst, vk::DeviceSize size) {
         vk::CommandBufferAllocateInfo alloc_info(
             *p_command_pool,

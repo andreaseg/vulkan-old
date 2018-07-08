@@ -14,6 +14,7 @@ namespace vk_mem {
 
         std::tuple<vk::Buffer, vk::DeviceMemory> create_transfer_buffer(vk::DeviceSize size);
         std::tuple<vk::Buffer, vk::DeviceMemory> create_vertex_buffer(vk::DeviceSize size);
+        std::tuple<vk::Buffer, vk::DeviceMemory> create_index_buffer(vk::DeviceSize size);
         void copy_buffer(vk::Buffer &src, vk::Buffer &dst, vk::DeviceSize size);
 
         private:

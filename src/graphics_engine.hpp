@@ -116,6 +116,8 @@ class Graphics {
         vk_mem::Manager memoryManager;
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
+        vk::Buffer indexBuffer;
+        vk::DeviceMemory indexBufferMemory;
 
 
         void check_support();
@@ -131,6 +133,7 @@ class Graphics {
         void create_framebuffers();
         void create_command_pool();
         void create_vertex_buffers();
+        void create_index_buffers();
         void create_command_buffers();
         void create_sync_objects();
 
