@@ -2,6 +2,8 @@
 #define GRAPHICS_ENGINE_HPP
 
 #include "includes.hpp"
+#include "vulkan_memory.hpp"
+#include "vulkan_helper.hpp"
 #include <algorithm>
 #include <functional>
 #include <unordered_map>
@@ -111,6 +113,7 @@ class Graphics {
         std::vector<FrameSyncObjects> frameSyncObjects;
         size_t current_frame = 0;
 
+        vk_mem::Manager memoryManager;
         vk::Buffer vertexBuffer;
         vk::DeviceMemory vertexBufferMemory;
 

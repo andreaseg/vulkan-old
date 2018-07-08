@@ -416,28 +416,21 @@ void Graphics::create_command_pool() {
 }
 
 void Graphics::create_vertex_buffers() {
+    memoryManager = vk_mem::Manager(&physical_device, &device, &queue, &commandPool);
+
     vk::DeviceSize buffer_size = sizeof(vertices[0]) * vertices.size();
 
-    auto [staging_buffer, staging_memory] = vk_mem::create_buffer(
-        physical_device, device, buffer_size,
-        vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-    );
+    auto [staging_buffer, staging_memory] = memoryManager.create_transfer_buffer(buffer_size);
 
     void* data = device.mapMemory(staging_memory, 0, buffer_size, vk::MemoryMapFlags());
     memcpy(data, vertices.data(), (size_t) buffer_size);
     device.unmapMemory(staging_memory);
 
-
-    auto res = vk_mem::create_buffer(
-        physical_device, device, buffer_size,
-        vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
+    auto res = memoryManager.create_vertex_buffer(buffer_size);
     vertexBuffer = std::get<0>(res);
     vertexBufferMemory = std::get<1>(res);
 
-    vk_mem::copy_buffer(device, queue, commandPool, staging_buffer, vertexBuffer, buffer_size);
+    memoryManager.copy_buffer(staging_buffer, vertexBuffer, buffer_size);
 
     device.destroyBuffer(staging_buffer);
     device.freeMemory(staging_memory);

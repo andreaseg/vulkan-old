@@ -1,5 +1,5 @@
-#ifndef vulkan_helper_hpp
-#define vulkan_helper_hpp
+#ifndef VULKAN_HELPER_HPP
+#define VULKAN_HELPER_HPP
 
 #include "includes.hpp"
 
@@ -21,4 +21,4 @@ namespace vk_help {
     std::vector<vk::ImageView> create_swapchain_image_views(const vk::Device &device, const std::vector<vk::Image> &swapChainImages, const vk::Format &swapChainImageFormat);
 }
 
-#endif // vulkan_helper_hpp
+#endif // VULKAN_HELPER_HPP

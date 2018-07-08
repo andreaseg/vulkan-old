@@ -3,10 +3,27 @@
 
 #include "includes.hpp"
 #include <tuple>
+#include <memory>
 
 namespace vk_mem {
-    std::tuple<vk::Buffer, vk::DeviceMemory> create_buffer(const vk::PhysicalDevice physical_device, const vk::Device &device, const uint32_t size, const vk::BufferUsageFlags usage_flags, const vk::MemoryPropertyFlags properties);
-    void copy_buffer(const vk::Device &device, const vk::Queue &queue, const vk::CommandPool &command_pool, vk::Buffer &source, vk::Buffer &dest, vk::DeviceSize size);
+
+    class Manager {
+        public:
+        Manager() {};
+        Manager(vk::PhysicalDevice *p_physical_device, vk::Device *p_device, vk::Queue *p_queue, vk::CommandPool *p_command_pool);
+
+        std::tuple<vk::Buffer, vk::DeviceMemory> create_transfer_buffer(vk::DeviceSize size);
+        std::tuple<vk::Buffer, vk::DeviceMemory> create_vertex_buffer(vk::DeviceSize size);
+        void copy_buffer(vk::Buffer &src, vk::Buffer &dst, vk::DeviceSize size);
+
+        private:
+
+        vk::PhysicalDevice *p_physical_device;
+        vk::Device *p_device;
+        vk::Queue *p_queue;
+        vk::CommandPool *p_command_pool;
+    };
+
 }
 
 #endif
