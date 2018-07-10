@@ -40,6 +40,8 @@ namespace vk_mem {
 
         MemoryBlock *mem_block = &memory_blocks[memory_type];
 
+        vk::DeviceSize mem_block_index = 0;
+
         while(true) {
             if (!mem_block->memory) {
                 vk::MemoryAllocateInfo alloc_info(MEMORY_BLOCK_SIZE, memory_type);
@@ -67,7 +69,7 @@ namespace vk_mem {
 
                     BufferHandle handle;
                     handle.type = memory_type;
-                    handle.offset = last_buffer_end;
+                    handle.offset = last_buffer_end + mem_block_index * MEMORY_BLOCK_SIZE;
                     std::cout << "Bound buffer of type " << memory_type << " with offset " << last_buffer_end << std::endl;
                     return handle;
                 }
@@ -77,7 +79,7 @@ namespace vk_mem {
             if (integer_step(mem_reqs.size + last_buffer_end, MEMORY_SUBBLOCK_SIZE) < MEMORY_BLOCK_SIZE) {
                 BufferContainer container;
                 container.internal_buffer = buffer;
-                container.offset = last_buffer_end;
+                container.offset = last_buffer_end + mem_block_index * MEMORY_BLOCK_SIZE;
                 container.size = mem_reqs.size;
                 mem_block->buffers.push_back(container);
                 p_device->bindBufferMemory(mem_block->buffers.back().internal_buffer, mem_block->memory, last_buffer_end);
@@ -94,6 +96,7 @@ namespace vk_mem {
             }
 
             mem_block = mem_block->next;
+            ++mem_block_index;
         }
 
         throw("Unable to allocate buffer");
@@ -121,14 +124,12 @@ namespace vk_mem {
     BufferContainer* Manager::get_buffer(const BufferHandle &handle) {
         auto *mem_block = &memory_blocks[handle.type];
 
-        std::cout << "Getting buffer of type " << handle.type << " with offset " << handle.offset << std::endl;
-
         for (size_t i = 0; i < handle.offset / MEMORY_BLOCK_SIZE; ) {
             mem_block = mem_block->next;
         }
 
         for (auto &buffer : mem_block->buffers) {
-            if (buffer.offset == handle.offset) {
+            if (buffer.offset == handle.offset % MEMORY_BLOCK_SIZE) {
                 return &buffer;
             }
         }
@@ -138,8 +139,6 @@ namespace vk_mem {
 
     vk::DeviceMemory* Manager::get_memory(const BufferHandle &handle) {
         auto *mem_block = &memory_blocks[handle.type];
-
-        std::cout << "Getting device memory of type " << handle.type << " with offset " << handle.offset << std::endl;
 
         for (size_t i = 0; i < handle.offset / MEMORY_BLOCK_SIZE; ) {
             mem_block = mem_block->next;
