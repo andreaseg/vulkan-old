@@ -1,5 +1,6 @@
 #include "vulkan_memory.hpp"
 #include <iostream>
+#include <cstdlib>
 
 namespace vk_mem {
     uint32_t find_memory_type(const vk::PhysicalDevice &physical_device, const vk::MemoryRequirements &mem_req, const vk::MemoryPropertyFlags property_flags) {
@@ -14,7 +15,16 @@ namespace vk_mem {
         throw("Unable to allocate memory");
     }
 
-    std::tuple<vk::Buffer, vk::DeviceMemory> create_buffer(const vk::PhysicalDevice physical_device, const vk::Device &device, const uint32_t size, const vk::BufferUsageFlags usage_flags, const vk::MemoryPropertyFlags properties) {
+    template<typename T>
+    inline T integer_step(T val, T step) {
+        return ((val + step - 1) / step) * step;
+    }
+
+    bool BufferContainer::operator < (const BufferContainer& other) const {
+        return this->offset < other.offset;
+    }
+
+    BufferHandle Manager::create_buffer(const uint32_t size, const vk::BufferUsageFlags usage_flags, const vk::MemoryPropertyFlags properties) {
         vk::BufferCreateInfo create_info(
             vk::BufferCreateFlags(),
             size,
@@ -22,51 +32,161 @@ namespace vk_mem {
             vk::SharingMode::eExclusive
         );
 
-        vk::Buffer buffer = device.createBuffer(create_info);
+        vk::Buffer buffer = p_device->createBuffer(create_info);
 
-        vk::MemoryRequirements mem_reqs = device.getBufferMemoryRequirements(buffer);
+        vk::MemoryRequirements mem_reqs = p_device->getBufferMemoryRequirements(buffer);
 
-        uint32_t memory_type = find_memory_type(physical_device, mem_reqs, properties);
+        uint32_t memory_type = find_memory_type(*p_physical_device, mem_reqs, properties);
 
-        vk::MemoryAllocateInfo alloc_info(mem_reqs.size, memory_type);
+        MemoryBlock *mem_block = &memory_blocks[memory_type];
 
-        vk::DeviceMemory memory = device.allocateMemory(alloc_info);
+        while(true) {
+            if (!mem_block->memory) {
+                vk::MemoryAllocateInfo alloc_info(MEMORY_BLOCK_SIZE, memory_type);
+                try {
+                    mem_block->memory = p_device->allocateMemory(alloc_info);
+                } catch (...) {
+                    std::cerr << "Unable to allocate memory" << std::endl;
+                    break;
+                }
+                std::cout << "Allocating memory of type " << memory_type << " and size " << MEMORY_BLOCK_SIZE << std::endl;
+            }
 
-        device.getMemoryCommitment(memory);
+            vk::DeviceSize last_buffer_end = 0;
 
-        device.bindBufferMemory(buffer, memory, 0 /* offset */);
+            for(size_t i = 0; i < mem_block->buffers.size(); i++) {
+                
+                vk::DeviceSize next_buffer_start = integer_step(mem_block->buffers[i].offset, MEMORY_SUBBLOCK_SIZE);
+                if (integer_step(next_buffer_start - last_buffer_end, MEMORY_SUBBLOCK_SIZE) >= mem_reqs.size) {
+                    BufferContainer container;
+                    container.internal_buffer = buffer;
+                    container.offset = last_buffer_end;
+                    container.size = mem_reqs.size;
+                    mem_block->buffers.insert(mem_block->buffers.begin() + i, container);
+                    p_device->bindBufferMemory(mem_block->buffers[i].internal_buffer, mem_block->memory, last_buffer_end);
 
-        return {buffer, memory};
+                    BufferHandle handle;
+                    handle.type = memory_type;
+                    handle.offset = last_buffer_end;
+                    std::cout << "Bound buffer of type " << memory_type << " with offset " << last_buffer_end << std::endl;
+                    return handle;
+                }
+                last_buffer_end = integer_step(next_buffer_start + mem_block->buffers[i].size, MEMORY_SUBBLOCK_SIZE);
+            }
+
+            if (integer_step(mem_reqs.size + last_buffer_end, MEMORY_SUBBLOCK_SIZE) < MEMORY_BLOCK_SIZE) {
+                BufferContainer container;
+                container.internal_buffer = buffer;
+                container.offset = last_buffer_end;
+                container.size = mem_reqs.size;
+                mem_block->buffers.push_back(container);
+                p_device->bindBufferMemory(mem_block->buffers.back().internal_buffer, mem_block->memory, last_buffer_end);
+
+                BufferHandle handle;
+                handle.type = memory_type;
+                handle.offset = last_buffer_end;
+                std::cout << "Bound buffer of type " << memory_type << " with offset " << last_buffer_end << std::endl;
+                return handle;
+            }
+
+            if(mem_block->next == nullptr) {
+                mem_block->next = new MemoryBlock();
+            }
+
+            mem_block = mem_block->next;
+        }
+
+        throw("Unable to allocate buffer");
+    }
+
+    void Manager::free(const BufferHandle &handle) {
+        auto *mem_block = &memory_blocks[handle.type];
+
+        for (size_t i = 0; i < handle.offset % MEMORY_BLOCK_SIZE; ) {
+            mem_block = mem_block->next;
+        }
+
+        for (size_t i = 0; i < mem_block->buffers.size(); i++) {
+            if (mem_block->buffers[i].offset == handle.offset) {
+                p_device->destroyBuffer(mem_block->buffers[i].internal_buffer);
+                mem_block->buffers.erase(mem_block->buffers.begin() + i);
+                std::cout << "Freed memory of type " << handle.type << " with offset " << handle.offset << std::endl;
+                return;
+            }
+        }
+
+        throw("Unable to locate buffer");
+    }
+
+    BufferContainer* Manager::get_buffer(const BufferHandle &handle) {
+        auto *mem_block = &memory_blocks[handle.type];
+
+        std::cout << "Getting buffer of type " << handle.type << " with offset " << handle.offset << std::endl;
+
+        for (size_t i = 0; i < handle.offset / MEMORY_BLOCK_SIZE; ) {
+            mem_block = mem_block->next;
+        }
+
+        for (auto &buffer : mem_block->buffers) {
+            if (buffer.offset == handle.offset) {
+                return &buffer;
+            }
+        }
+
+        throw("Unable to locate buffer");
+    }
+
+    vk::DeviceMemory* Manager::get_memory(const BufferHandle &handle) {
+        auto *mem_block = &memory_blocks[handle.type];
+
+        std::cout << "Getting device memory of type " << handle.type << " with offset " << handle.offset << std::endl;
+
+        for (size_t i = 0; i < handle.offset / MEMORY_BLOCK_SIZE; ) {
+            mem_block = mem_block->next;
+        }
+
+        return &mem_block->memory;
     }
 
     Manager::Manager(vk::PhysicalDevice *p_physical_device, vk::Device *p_device, vk::Queue *p_queue, vk::CommandPool *p_command_pool)
         : p_physical_device(p_physical_device), p_device(p_device), p_queue(p_queue), p_command_pool(p_command_pool) {}
 
-    std::tuple<vk::Buffer, vk::DeviceMemory> Manager::create_transfer_buffer(vk::DeviceSize size) {
+    BufferHandle Manager::create_transfer_buffer(const vk::DeviceSize size) {
         return create_buffer(
-            *p_physical_device, *p_device, size,
+            size,
             vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
         );
     }
 
-    std::tuple<vk::Buffer, vk::DeviceMemory> Manager::create_vertex_buffer(vk::DeviceSize size) {
+    BufferHandle Manager::create_vertex_buffer(const vk::DeviceSize size) {
         return create_buffer(
-            *p_physical_device, *p_device, size,
+            size,
             vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
     }
 
-    std::tuple<vk::Buffer, vk::DeviceMemory> Manager::create_index_buffer(vk::DeviceSize size) {
+    BufferHandle Manager::create_index_buffer(const vk::DeviceSize size) {
         return create_buffer(
-            *p_physical_device, *p_device, size,
+            size,
             vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
     }
 
-    void Manager::copy_buffer(vk::Buffer &src, vk::Buffer &dst, vk::DeviceSize size) {
+    void Manager::copy_buffer(BufferHandle &src, BufferHandle &dst) {
+        BufferContainer *p_src = get_buffer(src);
+        BufferContainer *p_dst = get_buffer(dst);
+
+        if (p_dst->size < p_src->size) {
+            throw("Error: Attempting to copy to a undersized buffer");
+        }
+
+        std::cout << "Copying buffer from "
+        << p_src->offset << " with size " << p_src->size << " of type " << src.type << " to "
+        << p_dst->offset << " with size " << p_dst->size << " of type " << dst.type << std::endl;
+
         vk::CommandBufferAllocateInfo alloc_info(
             *p_command_pool,
             vk::CommandBufferLevel::ePrimary,
@@ -82,12 +202,12 @@ namespace vk_mem {
         command_buffer.begin(begin_info);
         {
             vk::BufferCopy copy_region(
-                0,      // Source offset
-                0,      // Destination offset
-                size    // Size
+                p_src->offset,      // Source offset
+                p_dst->offset,      // Destination offset
+                p_src->size        // Size
             );
             
-            command_buffer.copyBuffer(src, dst, copy_region);
+            command_buffer.copyBuffer(p_src->internal_buffer, p_dst->internal_buffer, copy_region);
         }
         command_buffer.end();
 
@@ -96,6 +216,36 @@ namespace vk_mem {
         p_queue->submit(submit_info, nullptr);
         p_queue->waitIdle();
         p_device->freeCommandBuffers(*p_command_pool, command_buffer);
+    }
+
+    void* Manager::mapMemory(const BufferHandle &handle, const vk::MemoryMapFlags flags) {
+        BufferContainer *p_con = get_buffer(handle);
+        std::cout << "Mapping memory with offset " << p_con->offset << " and size " << p_con->size << std::endl;
+        return p_device->mapMemory(*get_memory(handle), p_con->offset, p_con->size, flags);
+    }
+
+    void Manager::unmapMemory(const BufferHandle &handle) {
+        std::cout << "Unmapping memory" << std::endl;
+        p_device->unmapMemory(*get_memory(handle));
+    }
+
+    void destroy_recursive(const vk::Device &device, MemoryBlock &block) {
+        for (auto &buffer : block.buffers) {
+            device.destroyBuffer(buffer.internal_buffer);
+        }
+        device.free(block.memory);
+
+        if (block.next != nullptr) {
+            destroy_recursive(device, *block.next);
+        }
+
+        delete block.next;
+    }
+
+    void Manager::destroy() {
+        for (auto &[key, val] : memory_blocks) {
+            destroy_recursive(*p_device, val);
+        }
     }
     
 }

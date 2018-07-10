@@ -114,10 +114,8 @@ class Graphics {
         size_t current_frame = 0;
 
         vk_mem::Manager memoryManager;
-        vk::Buffer vertexBuffer;
-        vk::DeviceMemory vertexBufferMemory;
-        vk::Buffer indexBuffer;
-        vk::DeviceMemory indexBufferMemory;
+        vk_mem::BufferHandle vertexBuffer;
+        vk_mem::BufferHandle indexBuffer;
 
 
         void check_support();

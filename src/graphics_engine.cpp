@@ -427,40 +427,32 @@ void Graphics::create_vertex_buffers() {
 
     vk::DeviceSize buffer_size = sizeof(vertices[0]) * vertices.size();
 
-    auto [staging_buffer, staging_memory] = memoryManager.create_transfer_buffer(buffer_size);
+    vk_mem::BufferHandle staging_buffer = memoryManager.create_transfer_buffer(buffer_size);
+    vertexBuffer = memoryManager.create_vertex_buffer(buffer_size);
 
-    void* data = device.mapMemory(staging_memory, 0, buffer_size, vk::MemoryMapFlags());
+    void* data = memoryManager.mapMemory(staging_buffer);
     memcpy(data, vertices.data(), (size_t) buffer_size);
-    device.unmapMemory(staging_memory);
+    memoryManager.unmapMemory(staging_buffer);
 
-    auto res = memoryManager.create_vertex_buffer(buffer_size);
-    vertexBuffer = std::get<0>(res);
-    vertexBufferMemory = std::get<1>(res);
+    memoryManager.copy_buffer(staging_buffer, vertexBuffer);
 
-    memoryManager.copy_buffer(staging_buffer, vertexBuffer, buffer_size);
-
-    device.destroyBuffer(staging_buffer);
-    device.freeMemory(staging_memory);
+    memoryManager.free(staging_buffer);
     
 }
 
 void Graphics::create_index_buffers() {
     vk::DeviceSize buffer_size = sizeof(indices[0]) * indices.size();
 
-    auto [staging_buffer, staging_memory] = memoryManager.create_transfer_buffer(buffer_size);
+    vk_mem::BufferHandle staging_buffer = memoryManager.create_transfer_buffer(buffer_size);
+    indexBuffer = memoryManager.create_index_buffer(buffer_size);
 
-    void* data = device.mapMemory(staging_memory, 0, buffer_size, vk::MemoryMapFlags());
+    void* data = memoryManager.mapMemory(staging_buffer);
     memcpy(data, indices.data(), (size_t) buffer_size);
-    device.unmapMemory(staging_memory);
+    memoryManager.unmapMemory(staging_buffer);
 
-    auto res = memoryManager.create_index_buffer(buffer_size);
-    indexBuffer = std::get<0>(res);
-    indexBufferMemory = std::get<1>(res);
+    memoryManager.copy_buffer(staging_buffer, indexBuffer);
 
-    memoryManager.copy_buffer(staging_buffer, indexBuffer, buffer_size);
-
-    device.destroy(staging_buffer);
-    device.freeMemory(staging_memory);
+    memoryManager.free(staging_buffer);
 }
 
 void Graphics::create_command_buffers() {
@@ -476,7 +468,7 @@ void Graphics::create_command_buffers() {
     commandBuffers = device.allocateCommandBuffers(alloc_info);
 
     vk::ClearValue clear_color;
-    clear_color.color.setFloat32({0.0f, 0.0f, 0.0f, 1.0f});
+    clear_color.color.setFloat32({0.0f, 0.0f, 0.2f, 1.0f});
     std::vector<vk::ClearValue> clear_values = {clear_color};
 
     vk::Rect2D render_area(
@@ -508,8 +500,12 @@ void Graphics::create_command_buffers() {
 
         cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        vk::Buffer vertex_buffers[] = {vertexBuffer};
-        vk::DeviceSize vertex_buffer_offsets[] = {0};
+        std::cout << "Pipeline stuff" << std::endl;
+        vk_mem::BufferContainer *vertex_buffer_container = memoryManager.get_buffer(vertexBuffer);
+        vk::Buffer vertex_buffers[] = {vertex_buffer_container->internal_buffer};
+        vk::DeviceSize vertex_buffer_offsets[] = {vertex_buffer_container->offset};
+        vk_mem::BufferContainer *index_buffer = memoryManager.get_buffer(indexBuffer);
+
 
         cmd->bindVertexBuffers(
             0,                      // First binding
@@ -519,8 +515,8 @@ void Graphics::create_command_buffers() {
         );
 
         cmd->bindIndexBuffer(
-            indexBuffer,            // Buffer
-            0,                      // Offset
+            index_buffer->internal_buffer,  // Buffer
+            index_buffer->offset,           // Offset
             vk::IndexType::eUint16  // Index type
         );
 
@@ -666,11 +662,7 @@ void Graphics::clean_up_swapchain() {
 Graphics::~Graphics() {
     clean_up_swapchain();
 
-    device.destroyBuffer(vertexBuffer);
-    device.freeMemory(vertexBufferMemory);
-
-    device.destroyBuffer(indexBuffer);
-    device.freeMemory(indexBufferMemory);
+    memoryManager.destroy();
 
     for (auto &sync_objects : frameSyncObjects) {
         device.destroyFence(sync_objects.inFlightFence);
