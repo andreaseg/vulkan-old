@@ -20,6 +20,43 @@ namespace vk_mem {
         return ((val + step - 1) / step) * step;
     }
 
+    std::ostream& operator<< (std::ostream& stream, const BufferHandle& handle) {
+        stream << "BufferHandle<";
+        bool multiple_flags = false;
+        if ((handle.type & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0) {
+            if (multiple_flags) stream << "+";
+            stream << "DeviceLocal";
+            multiple_flags = true;
+        }
+        if ((handle.type & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0) {
+            if (multiple_flags) stream << "+";
+            stream << "HostCached";
+            multiple_flags = true;
+        }
+        if ((handle.type & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0) {
+            if (multiple_flags) stream << "+";
+            stream << "HostCoherent";
+            multiple_flags = true;
+        }
+        if ((handle.type & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0) {
+            if (multiple_flags) stream << "+";
+            stream << "HostVisible";
+            multiple_flags = true;
+        }
+        if ((handle.type & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) != 0) {
+            if (multiple_flags) stream << "+";
+            stream << "Lazy";
+            multiple_flags = true;
+        }
+        if ((handle.type & VK_MEMORY_PROPERTY_PROTECTED_BIT) != 0) {
+            if (multiple_flags) stream << "+";
+            stream << "Protected";
+            multiple_flags = true;
+        }
+        stream << ">[" << handle.offset << "]";
+        return stream;
+    }
+
     bool BufferContainer::operator < (const BufferContainer& other) const {
         return this->offset < other.offset;
     }
@@ -70,7 +107,7 @@ namespace vk_mem {
                     BufferHandle handle;
                     handle.type = memory_type;
                     handle.offset = last_buffer_end + mem_block_index * MEMORY_BLOCK_SIZE;
-                    std::cout << "Bound buffer of type " << memory_type << " with offset " << last_buffer_end << std::endl;
+                    std::cout << "Bound " << handle << std::endl;
                     return handle;
                 }
                 last_buffer_end = integer_step(next_buffer_start + mem_block->buffers[i].size, MEMORY_SUBBLOCK_SIZE);
@@ -87,7 +124,7 @@ namespace vk_mem {
                 BufferHandle handle;
                 handle.type = memory_type;
                 handle.offset = last_buffer_end;
-                std::cout << "Bound buffer of type " << memory_type << " with offset " << last_buffer_end << std::endl;
+                std::cout << "Bound " << handle << std::endl;
                 return handle;
             }
 
@@ -113,7 +150,7 @@ namespace vk_mem {
             if (mem_block->buffers[i].offset == handle.offset) {
                 p_device->destroyBuffer(mem_block->buffers[i].internal_buffer);
                 mem_block->buffers.erase(mem_block->buffers.begin() + i);
-                std::cout << "Freed memory of type " << handle.type << " with offset " << handle.offset << std::endl;
+                std::cout << "Freed " << handle << std::endl;
                 return;
             }
         }
@@ -182,9 +219,7 @@ namespace vk_mem {
             throw("Error: Attempting to copy to a undersized buffer");
         }
 
-        std::cout << "Copying buffer from "
-        << p_src->offset << " with size " << p_src->size << " of type " << src.type << " to "
-        << p_dst->offset << " with size " << p_dst->size << " of type " << dst.type << std::endl;
+        std::cout << "Copying from " << src << " to " << dst << std::endl;
 
         vk::CommandBufferAllocateInfo alloc_info(
             *p_command_pool,
@@ -219,7 +254,7 @@ namespace vk_mem {
 
     void* Manager::mapMemory(const BufferHandle &handle, const vk::MemoryMapFlags flags) {
         BufferContainer *p_con = get_buffer(handle);
-        std::cout << "Mapping memory with offset " << p_con->offset << " and size " << p_con->size << std::endl;
+        std::cout << "Mapping " << handle << " to memory" << std::endl;
         return p_device->mapMemory(*get_memory(handle), p_con->offset, p_con->size, flags);
     }
 

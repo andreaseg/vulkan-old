@@ -500,7 +500,6 @@ void Graphics::create_command_buffers() {
 
         cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        std::cout << "Pipeline stuff" << std::endl;
         vk_mem::BufferContainer *vertex_buffer_container = memoryManager.get_buffer(vertexBuffer);
         vk::Buffer vertex_buffers[] = {vertex_buffer_container->internal_buffer};
         vk::DeviceSize vertex_buffer_offsets[] = {vertex_buffer_container->offset};

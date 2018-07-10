@@ -23,6 +23,8 @@ namespace vk_mem {
     struct BufferHandle {
         uint32_t type;
         vk::DeviceSize offset;
+
+        friend std::ostream& operator<< (std::ostream& stream, const BufferHandle& handle);
     };
 
     struct MemoryBlock {
