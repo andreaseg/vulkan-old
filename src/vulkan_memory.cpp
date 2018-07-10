@@ -93,16 +93,16 @@ namespace vk_mem {
 
             vk::DeviceSize last_buffer_end = 0;
 
-            for(size_t i = 0; i < mem_block->buffers.size(); i++) {
+            for(auto &[key, val] : mem_block->buffers) {
                 
-                vk::DeviceSize next_buffer_start = integer_step(mem_block->buffers[i].offset, MEMORY_SUBBLOCK_SIZE);
+                vk::DeviceSize next_buffer_start = integer_step(val.offset, MEMORY_SUBBLOCK_SIZE);
                 if (integer_step(next_buffer_start - last_buffer_end, MEMORY_SUBBLOCK_SIZE) >= mem_reqs.size) {
                     BufferContainer container;
                     container.internal_buffer = buffer;
                     container.offset = last_buffer_end;
                     container.size = mem_reqs.size;
-                    mem_block->buffers.insert(mem_block->buffers.begin() + i, container);
-                    p_device->bindBufferMemory(mem_block->buffers[i].internal_buffer, mem_block->memory, last_buffer_end);
+                    mem_block->buffers[last_buffer_end] = container;
+                    p_device->bindBufferMemory(mem_block->buffers[last_buffer_end].internal_buffer, mem_block->memory, last_buffer_end);
 
                     BufferHandle handle;
                     handle.type = memory_type;
@@ -110,7 +110,7 @@ namespace vk_mem {
                     std::cout << "Bound " << handle << std::endl;
                     return handle;
                 }
-                last_buffer_end = integer_step(next_buffer_start + mem_block->buffers[i].size, MEMORY_SUBBLOCK_SIZE);
+                last_buffer_end = integer_step(next_buffer_start + val.size, MEMORY_SUBBLOCK_SIZE);
             }
 
             if (integer_step(mem_reqs.size + last_buffer_end, MEMORY_SUBBLOCK_SIZE) < MEMORY_BLOCK_SIZE) {
@@ -118,8 +118,8 @@ namespace vk_mem {
                 container.internal_buffer = buffer;
                 container.offset = last_buffer_end + mem_block_index * MEMORY_BLOCK_SIZE;
                 container.size = mem_reqs.size;
-                mem_block->buffers.push_back(container);
-                p_device->bindBufferMemory(mem_block->buffers.back().internal_buffer, mem_block->memory, last_buffer_end);
+                mem_block->buffers[container.offset] = container;
+                p_device->bindBufferMemory(mem_block->buffers[container.offset].internal_buffer, mem_block->memory, last_buffer_end);
 
                 BufferHandle handle;
                 handle.type = memory_type;
@@ -146,13 +146,12 @@ namespace vk_mem {
             mem_block = mem_block->next;
         }
 
-        for (size_t i = 0; i < mem_block->buffers.size(); i++) {
-            if (mem_block->buffers[i].offset == handle.offset) {
-                p_device->destroyBuffer(mem_block->buffers[i].internal_buffer);
-                mem_block->buffers.erase(mem_block->buffers.begin() + i);
-                std::cout << "Freed " << handle << std::endl;
-                return;
-            }
+        auto it = mem_block->buffers.find(handle.offset);
+        if (it != mem_block->buffers.end()) {
+            p_device->destroyBuffer(it->second.internal_buffer);
+            mem_block->buffers.erase (it);
+            std::cout << "Freed " << handle << std::endl;
+            return;
         }
 
         throw("Unable to locate buffer");
@@ -165,10 +164,9 @@ namespace vk_mem {
             mem_block = mem_block->next;
         }
 
-        for (auto &buffer : mem_block->buffers) {
-            if (buffer.offset == handle.offset % MEMORY_BLOCK_SIZE) {
-                return &buffer;
-            }
+        auto it = mem_block->buffers.find(handle.offset % MEMORY_BLOCK_SIZE);
+        if (it != mem_block->buffers.end()) {
+            return &it->second;
         }
 
         throw("Unable to locate buffer");
@@ -264,8 +262,8 @@ namespace vk_mem {
     }
 
     void destroy_recursive(const vk::Device &device, MemoryBlock &block) {
-        for (auto &buffer : block.buffers) {
-            device.destroyBuffer(buffer.internal_buffer);
+        for (auto &[key, val] : block.buffers) {
+            device.destroyBuffer(val.internal_buffer);
         }
         device.free(block.memory);
 

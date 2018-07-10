@@ -30,7 +30,7 @@ namespace vk_mem {
     struct MemoryBlock {
         vk::DeviceMemory memory;
         vk::DeviceSize size;
-        std::vector<BufferContainer> buffers;
+        std::map<vk::DeviceSize, BufferContainer> buffers;
         MemoryBlock *next;
     };
 
