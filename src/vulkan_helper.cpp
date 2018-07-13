@@ -1,8 +1,19 @@
 #include "vulkan_helper.hpp"
 #include <iostream>
 #include <fstream>
+#include <cstdlib>
 
 namespace vk_help {
+    #ifdef WINDOWS
+        bool check_env(const char* var) {
+            return GetEnvironmentVariable(var, nullptr, 0) != 0;
+        }
+    #else
+        bool check_env(const char* var) {
+            return std::getenv("VK_INSTANCE_LAYERS") != nullptr;
+        }
+    #endif
+
     vk::Instance create_glfw_instance(const std::string &app_name, const std::string &engine_name, const std::vector<char const*> optional_extensions) {
         std::vector<char const*> extensions;
         {
@@ -13,7 +24,9 @@ namespace vk_help {
             }
         }
         #ifdef DEBUG
+        if (check_env("VK_INSTANCE_LAYERS")) {
             extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+        }
         #endif
         extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
         extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
@@ -61,6 +74,12 @@ namespace vk_help {
 
     vk::Device create_device_khr(const vk::PhysicalDevice &physical_device, uint32_t queue_family) {
         std::vector<char const*> device_level_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+        #ifdef DEBUG
+        if (check_env("VK_INSTANCE_LAYERS")) {
+            device_level_extensions.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+        }
+        #endif
 
         float queuePriority = 0.0f;
         vk::DeviceQueueCreateInfo deviceQueueCreateInfo(

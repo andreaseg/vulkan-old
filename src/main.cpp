@@ -52,11 +52,16 @@ int main() {
     
 }
 
+#ifdef WINDOWS
 // Windows entry-point
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     (void)hInstance;
     (void)hPrevInstance;
     (void)lpCmdLine;
     (void)nCmdShow;
+    std::cout << "Using windows entry-point" << std::endl;
     return main();
 }
+#else
+#endif
+

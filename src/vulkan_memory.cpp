@@ -20,45 +20,54 @@ namespace vk_mem {
         return ((val + step - 1) / step) * step;
     }
 
-    std::ostream& operator<< (std::ostream& stream, const BufferHandle& handle) {
-        stream << "BufferHandle<";
+    std::string memory_type_to_string(uint32_t type) {
+        std::string ret = "";
         bool multiple_flags = false;
-        if ((handle.type & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0) {
-            if (multiple_flags) stream << "+";
-            stream << "DeviceLocal";
+        if ((type & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0) {
+            ret += "DeviceLocal";
             multiple_flags = true;
         }
-        if ((handle.type & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0) {
-            if (multiple_flags) stream << "+";
-            stream << "HostCached";
+        if ((type & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0) {
+            if (multiple_flags) ret += "+";
+            ret += "HostCached";
             multiple_flags = true;
         }
-        if ((handle.type & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0) {
-            if (multiple_flags) stream << "+";
-            stream << "HostCoherent";
+        if ((type & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0) {
+            if (multiple_flags) ret += "+";
+            ret += "HostCoherent";
             multiple_flags = true;
         }
-        if ((handle.type & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0) {
-            if (multiple_flags) stream << "+";
-            stream << "HostVisible";
+        if ((type & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0) {
+            if (multiple_flags) ret += "+";
+            ret += "HostVisible";
             multiple_flags = true;
         }
-        if ((handle.type & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) != 0) {
-            if (multiple_flags) stream << "+";
-            stream << "Lazy";
+        if ((type & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) != 0) {
+            if (multiple_flags) ret += "+";
+            ret += "Lazy";
             multiple_flags = true;
         }
-        if ((handle.type & VK_MEMORY_PROPERTY_PROTECTED_BIT) != 0) {
-            if (multiple_flags) stream << "+";
-            stream << "Protected";
+        if ((type & VK_MEMORY_PROPERTY_PROTECTED_BIT) != 0) {
+            if (multiple_flags) ret += "+";
+            ret += "Protected";
             multiple_flags = true;
         }
-        stream << ">[" << handle.offset << "]";
+        return ret;
+    }
+
+    std::ostream& operator<< (std::ostream& stream, const BufferHandle& handle) {
+        stream << "Buffer<";
+        stream << memory_type_to_string(handle.type);
+        stream << ">[" << handle.offset / MEMORY_SUBBLOCK_SIZE << "]";
         return stream;
     }
 
     bool BufferContainer::operator < (const BufferContainer& other) const {
         return this->offset < other.offset;
+    }
+
+    BufferContainer::operator vk::Buffer() const {
+        return this->internal_buffer;
     }
 
     BufferHandle Manager::create_buffer(const uint32_t size, const vk::BufferUsageFlags usage_flags, const vk::MemoryPropertyFlags properties) {
@@ -88,7 +97,7 @@ namespace vk_mem {
                     std::cerr << "Unable to allocate memory" << std::endl;
                     break;
                 }
-                std::cout << "Allocating memory of type " << memory_type << " and size " << MEMORY_BLOCK_SIZE << std::endl;
+                std::cout << "Allocating memory of type <" << memory_type_to_string(memory_type) << "> and size " << MEMORY_BLOCK_SIZE / 1048576.0f << "MB" << std::endl;
             }
 
             vk::DeviceSize last_buffer_end = 0;
@@ -142,7 +151,7 @@ namespace vk_mem {
     void Manager::free(const BufferHandle &handle) {
         auto *mem_block = &memory_blocks[handle.type];
 
-        for (size_t i = 0; i < handle.offset % MEMORY_BLOCK_SIZE; ) {
+        for (size_t i = 0; i < handle.offset / MEMORY_BLOCK_SIZE; ) {
             mem_block = mem_block->next;
         }
 
@@ -154,10 +163,16 @@ namespace vk_mem {
             return;
         }
 
+        std::cerr << "Unable to locate buffer" << std::endl;
         throw("Unable to locate buffer");
     }
 
-    BufferContainer* Manager::get_buffer(const BufferHandle &handle) {
+    BufferContainer Manager::get_buffer(const BufferHandle &handle) {
+
+        if (handle.type == 0) {
+            throw("Null handle provided");
+        }
+
         auto *mem_block = &memory_blocks[handle.type];
 
         for (size_t i = 0; i < handle.offset / MEMORY_BLOCK_SIZE; ) {
@@ -166,20 +181,20 @@ namespace vk_mem {
 
         auto it = mem_block->buffers.find(handle.offset % MEMORY_BLOCK_SIZE);
         if (it != mem_block->buffers.end()) {
-            return &it->second;
+            return it->second;
         }
 
         throw("Unable to locate buffer");
     }
 
-    vk::DeviceMemory* Manager::get_memory(const BufferHandle &handle) {
+    vk::DeviceMemory Manager::get_memory(const BufferHandle &handle) {
         auto *mem_block = &memory_blocks[handle.type];
 
         for (size_t i = 0; i < handle.offset / MEMORY_BLOCK_SIZE; ) {
             mem_block = mem_block->next;
         }
 
-        return &mem_block->memory;
+        return mem_block->memory;
     }
 
     Manager::Manager(vk::PhysicalDevice *p_physical_device, vk::Device *p_device, vk::Queue *p_queue, vk::CommandPool *p_command_pool)
@@ -209,15 +224,23 @@ namespace vk_mem {
         );
     }
 
-    void Manager::copy_buffer(BufferHandle &src, BufferHandle &dst) {
-        BufferContainer *p_src = get_buffer(src);
-        BufferContainer *p_dst = get_buffer(dst);
+    BufferHandle Manager::create_uniform_buffer(const vk::DeviceSize size) {
+        return create_buffer(
+            size,
+            vk::BufferUsageFlagBits::eUniformBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+    }
 
-        if (p_dst->size < p_src->size) {
+    void Manager::copy_buffer(BufferHandle &src_handle, BufferHandle &dst_handle) {
+        BufferContainer src = get_buffer(src_handle);
+        BufferContainer dst = get_buffer(dst_handle);
+
+        if (dst.size < src.size) {
             throw("Error: Attempting to copy to a undersized buffer");
         }
 
-        std::cout << "Copying from " << src << " to " << dst << std::endl;
+        std::cout << "Copying from " << src_handle << " to " << dst_handle << std::endl;
 
         vk::CommandBufferAllocateInfo alloc_info(
             *p_command_pool,
@@ -234,12 +257,12 @@ namespace vk_mem {
         command_buffer.begin(begin_info);
         {
             vk::BufferCopy copy_region(
-                p_src->offset,      // Source offset
-                p_dst->offset,      // Destination offset
-                p_src->size        // Size
+                0,           // Source offset
+                0,           // Destination offset
+                src.size   // Size
             );
             
-            command_buffer.copyBuffer(p_src->internal_buffer, p_dst->internal_buffer, copy_region);
+            command_buffer.copyBuffer(src, dst, copy_region);
         }
         command_buffer.end();
 
@@ -251,14 +274,14 @@ namespace vk_mem {
     }
 
     void* Manager::mapMemory(const BufferHandle &handle, const vk::MemoryMapFlags flags) {
-        BufferContainer *p_con = get_buffer(handle);
-        std::cout << "Mapping " << handle << " to memory" << std::endl;
-        return p_device->mapMemory(*get_memory(handle), p_con->offset, p_con->size, flags);
+        BufferContainer con = get_buffer(handle);
+        //std::cout << "Mapping " << handle << " to memory" << std::endl;
+        return p_device->mapMemory(get_memory(handle), con.offset, con.size, flags);
     }
 
     void Manager::unmapMemory(const BufferHandle &handle) {
-        std::cout << "Unmapping memory" << std::endl;
-        p_device->unmapMemory(*get_memory(handle));
+        //std::cout << "Unmapping memory" << std::endl;
+        p_device->unmapMemory(get_memory(handle));
     }
 
     void destroy_recursive(const vk::Device &device, MemoryBlock &block) {

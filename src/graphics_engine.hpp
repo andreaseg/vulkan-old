@@ -9,6 +9,12 @@
 #include <unordered_map>
 #include <array>
 
+struct Transformations {
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
 struct Vertex {
     glm::vec2 pos;
     glm::vec3 color;
@@ -30,6 +36,7 @@ class Graphics {
 
         uint32_t getWidth();
         uint32_t getHeight();
+        float getAspectRatio();
 
         void setDimensions(uint32_t width, uint32_t height);
 
@@ -103,6 +110,11 @@ class Graphics {
         std::vector<vk::ImageView> swapChainImageViews;
 
         vk::RenderPass renderPass;
+
+        vk::DescriptorPool descriptorPool;
+        vk::DescriptorSetLayout descriptorSetLayout;
+        std::vector<vk::DescriptorSet> descriptorSets;
+
         vk::PipelineLayout pipelineLayout;
         vk::Pipeline graphicsPipeline;
 
@@ -116,6 +128,7 @@ class Graphics {
         vk_mem::Manager memoryManager;
         vk_mem::BufferHandle vertexBuffer;
         vk_mem::BufferHandle indexBuffer;
+        std::vector<vk_mem::BufferHandle> uniformBuffers;
 
 
         void check_support();
@@ -127,17 +140,22 @@ class Graphics {
         void create_swapchain();
         void create_image_views();
         void create_render_pass();
+        void create_descriptor_set_layout();
         void create_pipeline();
         void create_framebuffers();
         void create_command_pool();
         void create_vertex_buffers();
         void create_index_buffers();
+        void create_uniform_buffers();
+        void create_descriptor_pool();
+        void create_descriptor_set();
         void create_command_buffers();
         void create_sync_objects();
 
         void recreate_swapchain();
         void clean_up_swapchain();
 
+        void update_uniform_buffers(uint32_t image_index);
         void draw_frame();
         virtual void loop() = 0;
 };

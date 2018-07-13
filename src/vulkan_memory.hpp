@@ -9,8 +9,8 @@
 
 namespace vk_mem {
 
-    static const vk::DeviceSize MEMORY_BLOCK_SIZE = 256 * 1024 * 1024;
-    static const vk::DeviceSize MEMORY_SUBBLOCK_SIZE = 16 * 1024;
+    static const vk::DeviceSize MEMORY_BLOCK_SIZE = 64 * 1024 * 1024;
+    static const vk::DeviceSize MEMORY_SUBBLOCK_SIZE = 1024;
 
     struct BufferContainer {
         vk::Buffer internal_buffer;
@@ -18,6 +18,7 @@ namespace vk_mem {
         vk::DeviceSize size;
 
         bool operator < (const BufferContainer& str) const;
+        operator vk::Buffer() const;
     };
 
     struct BufferHandle {
@@ -42,9 +43,10 @@ namespace vk_mem {
         BufferHandle create_transfer_buffer(const vk::DeviceSize size);
         BufferHandle create_vertex_buffer(const vk::DeviceSize size);
         BufferHandle create_index_buffer(const vk::DeviceSize size);
+        BufferHandle create_uniform_buffer(const vk::DeviceSize size);
         void copy_buffer(BufferHandle &src, BufferHandle &dst);
         void free(const BufferHandle &handle);
-        BufferContainer* get_buffer(const BufferHandle &handle);
+        BufferContainer get_buffer(const BufferHandle &handle);
         void* mapMemory(const BufferHandle &handle, const vk::MemoryMapFlags flags = vk::MemoryMapFlags());
         void unmapMemory(const BufferHandle &handle);
 
@@ -60,7 +62,7 @@ namespace vk_mem {
         vk::CommandPool *p_command_pool;
 
         BufferHandle create_buffer(const uint32_t size, const vk::BufferUsageFlags usage_flags, const vk::MemoryPropertyFlags properties);
-        vk::DeviceMemory *get_memory(const BufferHandle &handle);
+        vk::DeviceMemory get_memory(const BufferHandle &handle);
         
     };
 

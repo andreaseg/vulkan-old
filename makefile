@@ -22,16 +22,17 @@ else
 	LDFLAGS  = -m64 -o3 -march=native -Wl,-subsystem:windows
 endif
 
-CPPFLAGS+= -Xclang -flto-visibility-public-std $(CPPVER) $(WARN)
 ifeq ($(OS),Windows_NT)
 LDFLAGS+= $(CPPVER) $(WARN)
 LDLIBS= -L$(shell echo $(VULKAN_SDK))/Source/lib -lvulkan-1 -L$(shell echo $(GLFW))/Libs/ -lglfw3dll 
 TARGET=$(NAME).exe
+CPPFLAGS+= -DWINDOWS
 else
 LDFLAGS+= $(CPPVER) $(WARN)
 LDLIBS=-ldl -L$(shell echo $(VULKAN_SDK))/lib -lvulkan 
 TARGET=$(NAME)
 endif
+CPPFLAGS+= -Xclang -flto-visibility-public-std $(CPPVER) $(WARN)
 OBJS=$(patsubst src/%,$(DIR)/%,$(patsubst %.cpp,%.o,$(SRCS)))
 RM=rm -f
 INC= -I$(shell echo $(VULKAN_SDK))/Include  -I$(shell echo $(GLFW))/Include

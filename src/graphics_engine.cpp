@@ -2,7 +2,7 @@
 #include "graphics_engine.hpp"
 
 #include <iostream>
-#include <ctime>
+#include <chrono>
 
 Graphics* Graphics::current_engine;
 
@@ -50,6 +50,7 @@ std::array<vk::VertexInputAttributeDescription, 2>  Vertex::getAttributeDescript
     return attribs;
 }
 
+
 Graphics::Graphics() {
     try{
         dimensions = vk::Extent2D(640, 480);
@@ -62,9 +63,14 @@ Graphics::Graphics() {
         create_swapchain();
         create_image_views();
         create_render_pass();
+        create_descriptor_set_layout();
         create_pipeline();
         create_framebuffers();
         create_command_pool();
+        memoryManager = vk_mem::Manager(&physical_device, &device, &queue, &commandPool);
+        create_uniform_buffers();
+        create_descriptor_pool();
+        create_descriptor_set();
         create_vertex_buffers();
         create_index_buffers();
         create_command_buffers();
@@ -88,6 +94,10 @@ uint32_t Graphics::getWidth() {
 
 uint32_t Graphics::getHeight() {
     return dimensions.height;
+}
+
+float Graphics::getAspectRatio() {
+    return (float) dimensions.width / (float) dimensions.height;
 }
 
 void Graphics::setDimensions(uint32_t width, uint32_t height) {
@@ -229,6 +239,24 @@ void Graphics::create_render_pass() {
     
 }
 
+void Graphics::create_descriptor_set_layout() {
+    vk::DescriptorSetLayoutBinding ubo_layout_binding(
+        0,                                  // Binding
+        vk::DescriptorType::eUniformBuffer, // Type
+        1,                                  // Count
+        vk::ShaderStageFlagBits::eVertex,   // State flags
+        nullptr                             // Sampler
+    );
+
+    vk::DescriptorSetLayoutCreateInfo create_info(
+        vk::DescriptorSetLayoutCreateFlags(),
+        1,                  // Binding count
+        &ubo_layout_binding // Bindings
+    );
+
+    descriptorSetLayout = device.createDescriptorSetLayout(create_info);
+}
+
 void Graphics::create_pipeline() {
 
     assert(device);
@@ -297,11 +325,11 @@ void Graphics::create_pipeline() {
 
     vk::PipelineRasterizationStateCreateInfo rasterizer(
         vk::PipelineRasterizationStateCreateFlags(), 
-        VK_FALSE,                       // Depth clamp,
-        VK_FALSE,                       // Rasterizer discard enable,
+        VK_FALSE,                       // Depth clamp
+        VK_FALSE,                       // Rasterizer discard enable
         vk::PolygonMode::eFill,         // Polygon mode
-        vk::CullModeFlagBits::eBack,    // Cull mode,
-        vk::FrontFace::eClockwise,      // Front face,
+        vk::CullModeFlagBits::eNone,    // Cull mode (TODO change)
+        vk::FrontFace::eCounterClockwise,// Front face
         VK_FALSE,                       // Depth bias
         0,                              // Depth bias constant factor
         VK_FALSE,                       // Depth bias clamp
@@ -347,8 +375,8 @@ void Graphics::create_pipeline() {
 
     vk::PipelineLayoutCreateInfo pipeline_layout_info(
         vk::PipelineLayoutCreateFlags(),
-        0,          // Descriptor set count
-        nullptr,    // Descriptor sets
+        1,          // Descriptor set count
+        &descriptorSetLayout,    // Descriptor sets
         0,          // Push constant range counts
         nullptr     // Push constant ranges
     );
@@ -423,7 +451,7 @@ void Graphics::create_command_pool() {
 }
 
 void Graphics::create_vertex_buffers() {
-    memoryManager = vk_mem::Manager(&physical_device, &device, &queue, &commandPool);
+    std::cout << "vertex buffer" << std::endl;
 
     vk::DeviceSize buffer_size = sizeof(vertices[0]) * vertices.size();
 
@@ -441,6 +469,8 @@ void Graphics::create_vertex_buffers() {
 }
 
 void Graphics::create_index_buffers() {
+    std::cout << "index buffer" << std::endl;
+
     vk::DeviceSize buffer_size = sizeof(indices[0]) * indices.size();
 
     vk_mem::BufferHandle staging_buffer = memoryManager.create_transfer_buffer(buffer_size);
@@ -453,6 +483,69 @@ void Graphics::create_index_buffers() {
     memoryManager.copy_buffer(staging_buffer, indexBuffer);
 
     memoryManager.free(staging_buffer);
+}
+
+void Graphics::create_uniform_buffers() {
+    std::cout << "uniform buffer" << std::endl;
+
+    vk::DeviceSize buffer_size = sizeof(Transformations);
+
+    uniformBuffers.resize(swapChainImages.size());
+
+    for (auto &buffer : uniformBuffers) {
+        buffer = memoryManager.create_uniform_buffer(buffer_size);
+    }
+}
+
+void Graphics::create_descriptor_pool() {
+    vk::DescriptorPoolSize pool_size(
+        vk::DescriptorType::eUniformBuffer, // Type
+        (uint32_t) swapChainImages.size()   // Count
+    );
+
+    vk::DescriptorPoolCreateInfo create_info(
+        vk::DescriptorPoolCreateFlags(),
+        (uint32_t) swapChainImages.size(),  // Max sets
+        1,                                  // Pool count
+        &pool_size                          // Pool sizes
+    );
+
+    descriptorPool = device.createDescriptorPool(create_info);
+}
+
+void Graphics::create_descriptor_set() {
+    std::vector<vk::DescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout);
+
+    vk::DescriptorSetAllocateInfo alloc_info(
+        descriptorPool,             // Descriptor pool
+        (uint32_t) swapChainImages.size(),  // Descriptor count
+        layouts.data()              // Descriptor layouts
+    );
+    
+    descriptorSets.resize(swapChainImages.size());
+    descriptorSets = device.allocateDescriptorSets(alloc_info);
+
+
+    for (size_t i = 0; i < swapChainImages.size(); i++) {
+        vk::DescriptorBufferInfo buffer_info(
+            memoryManager.get_buffer(uniformBuffers[i]),// Buffer
+            0,                                          // Offset
+            sizeof(Transformations)                     // Range
+        );
+
+        vk::WriteDescriptorSet write_desc(
+            descriptorSets[i],                  // Dst set
+            0,                                  // Dst binding
+            0,                                  // Dst array element
+            1,                                  // Description count
+            vk::DescriptorType::eUniformBuffer, // Description type
+            nullptr,                            // Image info
+            &buffer_info,                       // Buffer info
+            nullptr                             // Texel buffer view
+        );
+
+        device.updateDescriptorSets(1, &write_desc, 0, nullptr);
+    }
 }
 
 void Graphics::create_command_buffers() {
@@ -500,24 +593,37 @@ void Graphics::create_command_buffers() {
 
         cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
 
-        vk_mem::BufferContainer *vertex_buffer_container = memoryManager.get_buffer(vertexBuffer);
-        vk::Buffer vertex_buffers[] = {vertex_buffer_container->internal_buffer};
-        vk::DeviceSize vertex_buffer_offsets[] = {vertex_buffer_container->offset};
-        vk_mem::BufferContainer *index_buffer = memoryManager.get_buffer(indexBuffer);
+        auto vertex_buffer_container = memoryManager.get_buffer(vertexBuffer);
+        vk::Buffer vertex_buffers[] = {vertex_buffer_container};
+        vk::DeviceSize vertex_buffer_offsets[] = {0};
+        auto index_buffer = memoryManager.get_buffer(indexBuffer);
 
 
         cmd->bindVertexBuffers(
             0,                      // First binding
             1,                      // Buffer count
-            vertex_buffers,         // Buffers
+            vertex_buffers,         // Internal buffer offsets
             vertex_buffer_offsets   // Offsets
         );
 
         cmd->bindIndexBuffer(
-            index_buffer->internal_buffer,  // Buffer
-            index_buffer->offset,           // Offset
+            index_buffer,           // Buffer
+            0,                      // Internal buffer offset
             vk::IndexType::eUint16  // Index type
         );
+
+        
+        cmd->bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,   // Pipeline bind point
+            pipelineLayout,                     // Pipeline layout
+            0,                                  // First set
+            1,                                  // Set count
+            &descriptorSets[i],                 // Descriptor sets
+            0,                                  // Dynamic offset count
+            nullptr                             // Dynamic offsets
+        );
+        
+        
 
         cmd->drawIndexed(
             (uint32_t) indices.size(), // Index count
@@ -549,8 +655,41 @@ void Graphics::create_sync_objects() {
     }
 }
 
-uint64_t framecounter = 0;
-std::clock_t old_time;
+const auto start_time = std::chrono::steady_clock::now();
+
+void Graphics::update_uniform_buffers(uint32_t image_index) {
+    auto current_time = std::chrono::steady_clock::now();
+
+    float time = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time).count() / 1000.0f;
+
+    auto up = glm::vec3(0.0f, 0.0f, 1.0f);
+    float fov = 45.0f;
+
+    Transformations t;
+    t.model = glm::rotate(
+        glm::mat4(1.0f),
+        time * glm::radians(90.0f),
+        up
+    );
+    t.view = glm::lookAt(
+        glm::vec3(2.0f, 2.0f, 2.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        up
+    );
+    t.proj = glm::perspective(
+        glm::radians(fov),
+        getAspectRatio(),
+        0.1f,
+        100.0f
+    );
+    t.proj[1][1] *= -1; // Y-coordinate fix
+
+    void* data = memoryManager.mapMemory(uniformBuffers[image_index]);
+    memcpy(data, &t, sizeof(t));
+    memoryManager.unmapMemory(uniformBuffers[image_index]);
+
+}
+
 
 void Graphics::draw_frame() {
     const uint64_t timeout = std::numeric_limits<uint64_t>::max();
@@ -580,6 +719,8 @@ void Graphics::draw_frame() {
     } else if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
         throw std::runtime_error("Failed to acquire image");
     }
+
+    update_uniform_buffers(image_index);
 
     std::vector<vk::Semaphore> wait_semaphores = {frameSyncObjects[current_frame].imageAvailableSemaphore};
     std::vector<vk::Semaphore> signal_semaphores = {frameSyncObjects[current_frame].renderFinishedSemaphore};
@@ -614,14 +755,6 @@ void Graphics::draw_frame() {
     }
 
     current_frame = (current_frame + 1) % MAX_CONCURRENT_FRAMES;
-
-    framecounter++;
-    if ((framecounter + 1) % 1000 == 0) {
-        auto new_time = std::clock();
-        auto elapsed_time = new_time - old_time;
-        old_time = new_time;
-        std::cout << "Frames per second " << (1000.0 * 1000.0 / (float)elapsed_time) << std::endl;
-    }
     
 }
 
@@ -661,8 +794,9 @@ void Graphics::clean_up_swapchain() {
 Graphics::~Graphics() {
     clean_up_swapchain();
 
+    device.destroyDescriptorPool(descriptorPool);
+    device.destroyDescriptorSetLayout(descriptorSetLayout);
     memoryManager.destroy();
-
     for (auto &sync_objects : frameSyncObjects) {
         device.destroyFence(sync_objects.inFlightFence);
         device.destroySemaphore(sync_objects.imageAvailableSemaphore);
@@ -684,6 +818,9 @@ void Graphics::start() {
     glfwSetWindowFocusCallback(window, glfw_window_focus_callback);
     glfwSetCursorPosCallback(window, glfw_mouse_pos_callback);
     glfwSetWindowSizeCallback(window, window_size_callback);
+
+    std::cout << "Starting" << std::endl;
+
     while (!glfw::glfwWindowShouldClose(window)) {
         glfw::glfwPollEvents();
         loop();
