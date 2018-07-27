@@ -261,4 +261,18 @@ namespace vk_help {
 
         return swapChainImageViews;
     }
+
+    
+
+    image_container load_image(std::string path, int format) {
+        image_container container;
+
+        container.image = stbi_load(path.c_str(), &container.width, &container.height, &container.channels, format);
+
+        if (!container.image) {
+            throw std::runtime_error("Failed to load image");
+        }
+
+        return container;
+    }
 }

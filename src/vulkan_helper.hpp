@@ -19,6 +19,24 @@ namespace vk_help {
     std::tuple<vk::SwapchainKHR, vk::Format> create_standard_swapchain(const vk::PhysicalDevice &physical_device, const vk::Device &device, const vk::SurfaceKHR &surface, vk::Extent2D dimensions, glfw::GLFWwindow *window, uint32_t queue_family);
 
     std::vector<vk::ImageView> create_swapchain_image_views(const vk::Device &device, const std::vector<vk::Image> &swapChainImages, const vk::Format &swapChainImageFormat);
+
+    struct image_container {
+        int width, height, channels;
+        stbi_uc *image;
+
+        image_container() {}
+
+        ~image_container() {
+            stbi_image_free(image);
+        }
+
+        image_container(image_container&&) = default;
+        image_container& operator=(image_container&&) = default;
+
+        image_container(const image_container&) = delete;
+    };
+
+    image_container load_image(std::string path, int format = STBI_rgb_alpha);
 }
 
 #endif // VULKAN_HELPER_HPP

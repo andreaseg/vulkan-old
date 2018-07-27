@@ -129,6 +129,10 @@ class Graphics {
         vk_mem::BufferHandle vertexBuffer;
         vk_mem::BufferHandle indexBuffer;
         std::vector<vk_mem::BufferHandle> uniformBuffers;
+        
+        // TODO move to memory manager
+        vk::Image textureImage;
+        vk::DeviceMemory textureImageMemory;
 
 
         void check_support();
@@ -147,6 +151,7 @@ class Graphics {
         void create_vertex_buffers();
         void create_index_buffers();
         void create_uniform_buffers();
+        void create_texture_buffers();
         void create_descriptor_pool();
         void create_descriptor_set();
         void create_command_buffers();

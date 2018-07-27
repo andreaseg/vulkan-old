@@ -73,6 +73,7 @@ Graphics::Graphics() {
         create_descriptor_set();
         create_vertex_buffers();
         create_index_buffers();
+        create_texture_buffers();
         create_command_buffers();
         create_sync_objects();
 
@@ -451,7 +452,6 @@ void Graphics::create_command_pool() {
 }
 
 void Graphics::create_vertex_buffers() {
-    std::cout << "vertex buffer" << std::endl;
 
     vk::DeviceSize buffer_size = sizeof(vertices[0]) * vertices.size();
 
@@ -469,7 +469,6 @@ void Graphics::create_vertex_buffers() {
 }
 
 void Graphics::create_index_buffers() {
-    std::cout << "index buffer" << std::endl;
 
     vk::DeviceSize buffer_size = sizeof(indices[0]) * indices.size();
 
@@ -486,7 +485,6 @@ void Graphics::create_index_buffers() {
 }
 
 void Graphics::create_uniform_buffers() {
-    std::cout << "uniform buffer" << std::endl;
 
     vk::DeviceSize buffer_size = sizeof(Transformations);
 
@@ -495,6 +493,55 @@ void Graphics::create_uniform_buffers() {
     for (auto &buffer : uniformBuffers) {
         buffer = memoryManager.create_uniform_buffer(buffer_size);
     }
+}
+
+void Graphics::create_texture_buffers() {
+    std::cout << "Creating texture buffers" << std::endl;
+    auto image = vk_help::load_image("textures/texture.jpg");
+
+    vk::DeviceSize buffer_size = image.width * image.height * 4;
+
+    vk_mem::BufferHandle staging_buffer = memoryManager.create_transfer_buffer(buffer_size);
+    
+    {
+        vk::ImageCreateInfo create_info(
+            vk::ImageCreateFlags(),
+            vk::ImageType::e2D,                         // Type
+            vk::Format::eR8G8B8A8Unorm,                 // Format
+            vk::Extent3D(image.width, image.height, 1), // Extent
+            1,                                          // Mip levels
+            1,                                          // Array layers
+            vk::SampleCountFlagBits::e1,                // Samples
+            vk::ImageTiling::eOptimal,                  // Tiling
+            vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, // Usage
+            vk::SharingMode::eExclusive,                // Sharing mode
+            1,                                          // Queue family count
+            &queue_family,                              // Queue families
+            vk::ImageLayout::eUndefined                 // Layout
+        );
+
+        textureImage = device.createImage(create_info);
+    }
+
+    {
+        auto mem_reqs = device.getImageMemoryRequirements(textureImage);
+        auto mem_type = memoryManager.find_memory_type(mem_reqs, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        std::cout << "Allocating memory of type " << mem_type << " for image." << std::endl;
+        vk::MemoryAllocateInfo alloc_info(mem_reqs.size, mem_type);
+
+        textureImageMemory = device.allocateMemory(alloc_info);
+
+        device.bindImageMemory(textureImage, textureImageMemory, 0 /* memory offset */);
+    }
+
+    void* data = memoryManager.mapMemory(staging_buffer);
+    memcpy(data, image.image, (size_t) buffer_size);
+    memoryManager.unmapMemory(staging_buffer);
+
+    memoryManager.copy_buffer(staging_buffer, textureImage, image.width, image.height, vk::Format::eR8G8B8A8Unorm, vk::ImageLayout::eUndefined);
+
+    memoryManager.free(staging_buffer);
+    std::cout << "Finished wih texture" << std::endl;
 }
 
 void Graphics::create_descriptor_pool() {
@@ -796,6 +843,11 @@ Graphics::~Graphics() {
 
     device.destroyDescriptorPool(descriptorPool);
     device.destroyDescriptorSetLayout(descriptorSetLayout);
+
+    device.destroyImage(textureImage);
+    device.freeMemory(textureImageMemory);
+
+
     memoryManager.destroy();
     for (auto &sync_objects : frameSyncObjects) {
         device.destroyFence(sync_objects.inFlightFence);

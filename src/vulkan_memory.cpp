@@ -3,8 +3,8 @@
 #include <cstdlib>
 
 namespace vk_mem {
-    uint32_t find_memory_type(const vk::PhysicalDevice &physical_device, const vk::MemoryRequirements &mem_req, const vk::MemoryPropertyFlags property_flags) {
-        auto properties = physical_device.getMemoryProperties();
+    uint32_t Manager::find_memory_type(const vk::MemoryRequirements &mem_req, const vk::MemoryPropertyFlags property_flags) {
+        auto properties = p_physical_device->getMemoryProperties();
 
         for (uint32_t i = 0; i < properties.memoryTypeCount; i++) {
             if ((mem_req.memoryTypeBits & (1 << i))
@@ -12,7 +12,7 @@ namespace vk_mem {
                     return i;
             }
         }
-        throw("Unable to allocate memory");
+        throw std::runtime_error("Unable to allocate memory");
     }
 
     template<typename T>
@@ -62,12 +62,27 @@ namespace vk_mem {
         return stream;
     }
 
+    std::ostream& operator<< (std::ostream& stream, const ImageHandle& handle) {
+        stream << "Image<";
+        stream << memory_type_to_string(handle.type);
+        stream << ">[" << handle.offset / MEMORY_SUBBLOCK_SIZE << "]";
+        return stream;
+    }
+
     bool BufferContainer::operator < (const BufferContainer& other) const {
         return this->offset < other.offset;
     }
 
     BufferContainer::operator vk::Buffer() const {
         return this->internal_buffer;
+    }
+
+    bool ImageContainer::operator < (const ImageContainer& other) const {
+        return this->offset < other.offset;
+    }
+
+    ImageContainer::operator vk::Image() const {
+        return this->internal_image;
     }
 
     BufferHandle Manager::create_buffer(const uint32_t size, const vk::BufferUsageFlags usage_flags, const vk::MemoryPropertyFlags properties) {
@@ -82,7 +97,7 @@ namespace vk_mem {
 
         vk::MemoryRequirements mem_reqs = p_device->getBufferMemoryRequirements(buffer);
 
-        uint32_t memory_type = find_memory_type(*p_physical_device, mem_reqs, properties);
+        uint32_t memory_type = find_memory_type(mem_reqs, properties);
 
         MemoryBlock *mem_block = &memory_blocks[memory_type];
 
@@ -145,7 +160,7 @@ namespace vk_mem {
             ++mem_block_index;
         }
 
-        throw("Unable to allocate buffer");
+        throw std::runtime_error("Unable to allocate buffer");
     }
 
     void Manager::free(const BufferHandle &handle) {
@@ -164,13 +179,13 @@ namespace vk_mem {
         }
 
         std::cerr << "Unable to locate buffer" << std::endl;
-        throw("Unable to locate buffer");
+        throw std::runtime_error("Unable to locate buffer");
     }
 
     BufferContainer Manager::get_buffer(const BufferHandle &handle) {
 
         if (handle.type == 0) {
-            throw("Null handle provided");
+            throw std::runtime_error("Null handle provided");
         }
 
         auto *mem_block = &memory_blocks[handle.type];
@@ -184,7 +199,7 @@ namespace vk_mem {
             return it->second;
         }
 
-        throw("Unable to locate buffer");
+        throw std::runtime_error("Unable to locate buffer");
     }
 
     vk::DeviceMemory Manager::get_memory(const BufferHandle &handle) {
@@ -232,16 +247,7 @@ namespace vk_mem {
         );
     }
 
-    void Manager::copy_buffer(BufferHandle &src_handle, BufferHandle &dst_handle) {
-        BufferContainer src = get_buffer(src_handle);
-        BufferContainer dst = get_buffer(dst_handle);
-
-        if (dst.size < src.size) {
-            throw("Error: Attempting to copy to a undersized buffer");
-        }
-
-        std::cout << "Copying from " << src_handle << " to " << dst_handle << std::endl;
-
+    vk::CommandBuffer Manager::begin_one_time_command() {
         vk::CommandBufferAllocateInfo alloc_info(
             *p_command_pool,
             vk::CommandBufferLevel::ePrimary,
@@ -255,15 +261,11 @@ namespace vk_mem {
         );
 
         command_buffer.begin(begin_info);
-        {
-            vk::BufferCopy copy_region(
-                0,           // Source offset
-                0,           // Destination offset
-                src.size   // Size
-            );
-            
-            command_buffer.copyBuffer(src, dst, copy_region);
-        }
+
+        return command_buffer;
+    }
+
+    void Manager::end_one_time_command(vk::CommandBuffer &command_buffer) {
         command_buffer.end();
 
         vk::SubmitInfo submit_info(0, nullptr, nullptr, 1, &command_buffer, 0, nullptr);
@@ -271,6 +273,128 @@ namespace vk_mem {
         p_queue->submit(submit_info, nullptr);
         p_queue->waitIdle();
         p_device->freeCommandBuffers(*p_command_pool, command_buffer);
+    }
+
+    void Manager::copy_buffer(BufferHandle &src_handle, BufferHandle &dst_handle) {
+        BufferContainer src = get_buffer(src_handle);
+        BufferContainer dst = get_buffer(dst_handle);
+
+        if (dst.size < src.size) {
+            throw std::runtime_error("Error: Attempting to copy to a undersized buffer");
+        }
+
+        std::cout << "Copying from " << src_handle << " to " << dst_handle << std::endl;
+
+        auto command_buffer = begin_one_time_command();
+        
+        vk::BufferCopy copy_region(
+            0,           // Source offset
+            0,           // Destination offset
+            src.size   // Size
+        );
+        
+        command_buffer.copyBuffer(src, dst, copy_region);
+
+        end_one_time_command(command_buffer);
+        
+    }
+
+    struct layout_transition_flags {
+        vk::AccessFlags src_mask;
+        vk::AccessFlags dst_mask;
+        vk::PipelineStageFlags src_stage;
+        vk::PipelineStageFlags dst_stage;
+    };
+
+    constexpr layout_transition_flags get_layout_transition_flags(const vk::ImageLayout &old_layout, const vk::ImageLayout &new_layout) {
+        if (old_layout == vk::ImageLayout::eUndefined && new_layout == vk::ImageLayout::eTransferDstOptimal) {
+            return layout_transition_flags {
+                vk::AccessFlags(),
+                vk::AccessFlagBits::eTransferWrite,
+                vk::PipelineStageFlagBits::eTopOfPipe,
+                vk::PipelineStageFlagBits::eTransfer
+            };
+        } else if (old_layout == vk::ImageLayout::eTransferDstOptimal && new_layout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+            return layout_transition_flags {
+                vk::AccessFlagBits::eTransferWrite,
+                vk::AccessFlagBits::eShaderRead,
+                vk::PipelineStageFlagBits::eTransfer,
+                vk::PipelineStageFlagBits::eFragmentShader
+            };
+        } else {
+            throw std::invalid_argument("Unsupported layout transition");
+        }
+    }
+
+    void Manager::layout_transition(vk::Image image, const vk::Format &format, const vk::ImageLayout &old_layout, const vk::ImageLayout &new_layout) {
+
+        (void)format;
+
+        auto layout_transition = get_layout_transition_flags(old_layout, new_layout);
+
+        std::cout << "Layout transition" <<  (uint32_t)layout_transition.src_mask <<  "," << (uint32_t)layout_transition.dst_mask << "," << (uint32_t)layout_transition.src_stage << "," << (uint32_t)layout_transition.dst_stage << std::endl;
+
+        auto command_buffer = begin_one_time_command();
+
+        vk::ImageMemoryBarrier barrier(
+            layout_transition.src_mask, // Src access mask
+            layout_transition.dst_mask, // Dst access mask
+            old_layout, // Old layout
+            new_layout, // New layout
+            VK_QUEUE_FAMILY_IGNORED,
+            VK_QUEUE_FAMILY_IGNORED,
+            image,
+            vk::ImageSubresourceRange(
+                vk::ImageAspectFlagBits::eColor,
+                0, // Base mip level
+                1, // Level count
+                0, // Base array layer
+                1  // Layer count
+            )
+        );
+
+        command_buffer.pipelineBarrier(
+            layout_transition.src_stage,   // Src stage
+            layout_transition.dst_stage,   // Dst stage
+            vk::DependencyFlags(),      // Dependency flags
+            nullptr,                    // Memory barrier
+            nullptr,                    // Buffer barrier
+            barrier                     // Image barrier
+        );
+
+        end_one_time_command(command_buffer);
+    }
+
+    void Manager::copy_buffer(BufferHandle &src_handle, vk::Image &dst_image, uint32_t width, uint32_t height, const vk::Format &format, const vk::ImageLayout &old_layout) {
+        
+
+        layout_transition(dst_image, format, old_layout, vk::ImageLayout::eTransferDstOptimal);
+
+        {// Copy operation
+            auto command_buffer = begin_one_time_command();
+
+            vk::BufferImageCopy copy_region(
+                0,  // Buffer offset
+                0,  // Buffer row length
+                0,  // Buffer image height
+                vk::ImageSubresourceLayers(
+                    vk::ImageAspectFlagBits::eColor,
+                    0,  // Mip level
+                    0,  // Base array layer
+                    1   // Layer count
+                ),
+                vk::Offset3D(),                 // Offset
+                vk::Extent3D(width, height, 1)  // Extent
+            );
+
+            command_buffer.copyBufferToImage(get_buffer(src_handle), dst_image, vk::ImageLayout::eTransferDstOptimal, copy_region);
+
+            end_one_time_command(command_buffer);
+        }
+
+        layout_transition(dst_image, format, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        
     }
 
     void* Manager::mapMemory(const BufferHandle &handle, const vk::MemoryMapFlags flags) {
